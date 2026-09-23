@@ -121,6 +121,11 @@ interface StoreState {
   repLeaveOn: (repId: string, date: string) => RepLeave | null;
   submitLeaveRequest: (repId: string, date: string, reason: string) => boolean;
   decideLeaveRequest: (id: string, approve: boolean) => void;
+  removeLeave: (leaveId: string) => void;
+
+  // ---- company holidays ----
+  addHoliday: (date: string, name: string) => boolean;
+  removeHoliday: (date: string) => void;
 }
 
 const seedData = generateSeed();
@@ -665,6 +670,21 @@ export const useStore = create<StoreState>((set, get) => ({
       const leave: RepLeave = { id: "LV" + nextSeq, repId: req.repId, date: req.date, reason: req.reason };
       return { leaveRequests, leaveSeq: nextSeq, repLeaves: [...s.repLeaves, leave] };
     });
+  },
+
+  removeLeave: (leaveId) => {
+    set((s) => ({ repLeaves: s.repLeaves.filter((l) => l.id !== leaveId) }));
+  },
+
+  addHoliday: (date, name) => {
+    const state = get();
+    if (state.companyHolidays.some((h) => h.date === date)) return false;
+    set((s) => ({ companyHolidays: [...s.companyHolidays, { date, name }] }));
+    return true;
+  },
+
+  removeHoliday: (date) => {
+    set((s) => ({ companyHolidays: s.companyHolidays.filter((h) => h.date !== date) }));
   },
 }));
 
