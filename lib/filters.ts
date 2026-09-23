@@ -1,5 +1,36 @@
 import { effectivePriority } from "./scoring";
+import { isoToday, isoPlusDays } from "./dates";
 import type { Lead, Priority } from "./types";
+
+export type FuDatePreset = "all" | "overdue" | "today" | "week" | "30d" | "custom";
+export interface FuDateFilter {
+  preset: FuDatePreset;
+  from: string | null;
+  to: string | null;
+}
+export const EMPTY_FU_DATE_FILTER: FuDateFilter = { preset: "all", from: null, to: null };
+
+export function applyFuDateFilter(items: Lead[], f: FuDateFilter): Lead[] {
+  const today = isoToday();
+  switch (f.preset) {
+    case "overdue":
+      return items.filter((l) => l.nextFollowup! < today);
+    case "today":
+      return items.filter((l) => l.nextFollowup === today);
+    case "week":
+      return items.filter((l) => l.nextFollowup! >= today && l.nextFollowup! <= isoPlusDays(today, 7));
+    case "30d":
+      return items.filter((l) => l.nextFollowup! >= today && l.nextFollowup! <= isoPlusDays(today, 30));
+    case "custom":
+      return items.filter((l) => {
+        if (f.from && l.nextFollowup! < f.from) return false;
+        if (f.to && l.nextFollowup! > f.to) return false;
+        return true;
+      });
+    default:
+      return items;
+  }
+}
 
 export interface FilterState {
   search: string;

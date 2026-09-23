@@ -1,4 +1,4 @@
-import { isoToday } from "./dates";
+import { isoToday, daysUntil } from "./dates";
 import type { Plan, Lead } from "./types";
 
 // A won deal is billed monthly at its plan rate through an auto-debit
@@ -53,6 +53,22 @@ export function nextBillingDate(l: {
     "-" +
     String(cand.getDate()).padStart(2, "0");
   return cand < start ? l.mandateDate : isoOfCand;
+}
+
+// Once a reminder's logged for a given debit date, that row drops off the
+// list — keyed by (lead, billing date) so it reappears automatically once
+// the mandate rolls to next month's date rather than staying dismissed forever.
+export function duePayments(
+  leads: Lead[],
+  paymentReminders: Record<string, string>
+): { lead: Lead; date: string }[] {
+  return leads
+    .map((l) => ({ lead: l, date: nextBillingDate(l) }))
+    .filter(
+      (x): x is { lead: Lead; date: string } =>
+        !!x.date && daysUntil(x.date) <= PAYMENT_WINDOW_DAYS && paymentReminders[x.lead.id] !== x.date
+    )
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : leadMrr(b.lead) - leadMrr(a.lead)));
 }
 
 export const Q_MONTHS: [string, string][] = [

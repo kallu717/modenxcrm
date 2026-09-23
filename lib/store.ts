@@ -1,7 +1,7 @@
 import { create } from "zustand";
-import { isoToday, fmtShortDate } from "./dates";
+import { isoToday, isoPlusDays, fmtShortDate, fmtFollowup } from "./dates";
 import { scoreLead, bandForScore } from "./scoring";
-import { PLANS, fmtInr } from "./revenue";
+import { PLANS, fmtInr, leadMrr } from "./revenue";
 import { REPS, EDITABLE_FIELDS, ACCOUNT_EDITABLE_FIELDS, repById } from "./constants";
 import { generateSeed } from "./seed";
 import type { ImportRow } from "./import";
@@ -97,6 +97,12 @@ interface StoreState {
   importLeads: (rows: ImportRow[], sourceLabel: string) => { count: number; toOwnAccount: number };
   deleteLead: (leadId: string) => void;
   deleteAccount: (accountName: string) => void;
+  snoozeFollowup: (leadId: string, days: number) => void;
+  markContacted: (leadId: string, nextFollowup: string | null) => void;
+
+  // ---- payments ----
+  paymentReminders: Record<string, string>;
+  logPaymentReminder: (leadId: string, billingDate: string) => void;
 
   // ---- change requests ----
   pendingRequestFor: (leadId: string) => LeadChangeRequest | null;
@@ -126,6 +132,7 @@ export const useStore = create<StoreState>((set, get) => ({
   leaveSeq: 0,
   crSeq: 0,
   lrSeq: 0,
+  paymentReminders: {},
 
   currentUser: () => repById(get().currentUserId) || get().reps[0],
   isManager: () => get().currentUser().role === "Manager",
@@ -342,12 +349,17 @@ export const useStore = create<StoreState>((set, get) => ({
   // Leads are the single source of truth — deleting the last contact at an
   // account makes that account disappear from Accounts too, since it's derived.
   deleteLead: (leadId) => {
-    set((state) => ({
-      leads: state.leads.filter((l) => l.id !== leadId),
-      changeRequests: state.changeRequests.filter(
-        (c) => !(c.scope === "lead" && c.leadId === leadId)
-      ),
-    }));
+    set((state) => {
+      const { [leadId]: _removed, ...paymentReminders } = state.paymentReminders;
+      void _removed;
+      return {
+        leads: state.leads.filter((l) => l.id !== leadId),
+        changeRequests: state.changeRequests.filter(
+          (c) => !(c.scope === "lead" && c.leadId === leadId)
+        ),
+        paymentReminders,
+      };
+    });
   },
 
   deleteAccount: (accountName) => {
@@ -355,6 +367,67 @@ export const useStore = create<StoreState>((set, get) => ({
       leads: state.leads.filter((l) => l.account !== accountName),
       changeRequests: state.changeRequests.filter(
         (c) => !(c.scope === "account" && c.accountName === accountName)
+      ),
+    }));
+  },
+
+  snoozeFollowup: (leadId, days) => {
+    const state = get();
+    const me = state.currentUser();
+    set((s) => ({
+      leads: s.leads.map((l) => {
+        if (l.id !== leadId) return l;
+        const nextFollowup = isoPlusDays(l.nextFollowup || isoToday(), days);
+        return {
+          ...l,
+          nextFollowup,
+          activity: [
+            activityEntry(me.name, `Follow-up snoozed to ${fmtFollowup(nextFollowup)}.`),
+            ...l.activity,
+          ],
+        };
+      }),
+    }));
+  },
+
+  markContacted: (leadId, nextFollowup) => {
+    const state = get();
+    const me = state.currentUser();
+    set((s) => ({
+      leads: s.leads.map((l) => {
+        if (l.id !== leadId) return l;
+        const txt = nextFollowup
+          ? `Marked contacted. Next follow-up set to ${fmtFollowup(nextFollowup)}.`
+          : "Marked contacted. No further follow-up needed.";
+        return {
+          ...l,
+          nextFollowup,
+          activity: [activityEntry(me.name, txt), ...l.activity],
+        };
+      }),
+    }));
+  },
+
+  logPaymentReminder: (leadId, billingDate) => {
+    const state = get();
+    const me = state.currentUser();
+    const lead = state.leads.find((l) => l.id === leadId);
+    if (!lead) return;
+    set((s) => ({
+      paymentReminders: { ...s.paymentReminders, [leadId]: billingDate },
+      leads: s.leads.map((l) =>
+        l.id === leadId
+          ? {
+              ...l,
+              activity: [
+                activityEntry(
+                  me.name,
+                  `Payment reminder sent — ${fmtInr(leadMrr(l))} debits on ${fmtShortDate(billingDate)}.`
+                ),
+                ...l.activity,
+              ],
+            }
+          : l
       ),
     }));
   },
