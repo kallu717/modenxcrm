@@ -9,6 +9,10 @@ export const PLANS: Plan[] = [
   { id: "professional", name: "Professional", mrr: 7500 },
 ];
 
+export function fmtInr(n: number): string {
+  return "₹" + Math.round(n).toLocaleString("en-IN");
+}
+
 export function planById(id: string | null): Plan | null {
   return PLANS.find((p) => p.id === id) || null;
 }

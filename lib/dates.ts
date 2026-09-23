@@ -64,6 +64,14 @@ export function fmtFollowup(iso: string | null): string {
   return label;
 }
 
+export function followupBucket(iso: string | null): "overdue" | "today" | "upcoming" | null {
+  if (!iso) return null;
+  const today = isoToday();
+  if (iso < today) return "overdue";
+  if (iso === today) return "today";
+  return "upcoming";
+}
+
 export function fmtShortDate(iso: string): string {
   const d = new Date(iso + "T00:00:00");
   const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" };

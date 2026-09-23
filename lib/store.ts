@@ -1,6 +1,7 @@
 import { create } from "zustand";
-import { isoToday } from "./dates";
+import { isoToday, fmtShortDate } from "./dates";
 import { scoreLead, bandForScore } from "./scoring";
+import { PLANS, fmtInr } from "./revenue";
 import { REPS, EDITABLE_FIELDS, ACCOUNT_EDITABLE_FIELDS, repById } from "./constants";
 import { generateSeed } from "./seed";
 import type {
@@ -90,6 +91,7 @@ interface StoreState {
 
   // ---- lead lifecycle ----
   setLeadStage: (leadId: string, stage: Lead["stage"]) => void;
+  setLeadPlan: (leadId: string, planId: string, mandateDate: string) => void;
   createLead: (input: NewLeadInput) => Lead | null;
   deleteLead: (leadId: string) => void;
   deleteAccount: (accountName: string) => void;
@@ -182,6 +184,27 @@ export const useStore = create<StoreState>((set, get) => ({
           stage,
           stageHistory: [...l.stageHistory, { stage, date: isoToday() }],
           wonAt,
+        };
+      }),
+    }));
+  },
+
+  setLeadPlan: (leadId, planId, mandateDate) => {
+    const state = get();
+    const me = state.currentUser();
+    const lead = state.leads.find((l) => l.id === leadId);
+    if (!lead) return;
+    const planDef = PLANS.find((p) => p.id === planId);
+    if (!planDef) return;
+    set((s) => ({
+      leads: s.leads.map((l) => {
+        if (l.id !== leadId) return l;
+        const txt = `Subscription set — ${planDef.name} at ${fmtInr(planDef.mrr)}/month, mandate from ${fmtShortDate(mandateDate)}.`;
+        return {
+          ...l,
+          plan: planId,
+          mandateDate,
+          activity: [activityEntry(me.name, txt), ...l.activity],
         };
       }),
     }));
