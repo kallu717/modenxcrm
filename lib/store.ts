@@ -4,6 +4,7 @@ import { scoreLead, bandForScore } from "./scoring";
 import { PLANS, fmtInr } from "./revenue";
 import { REPS, EDITABLE_FIELDS, ACCOUNT_EDITABLE_FIELDS, repById } from "./constants";
 import { generateSeed } from "./seed";
+import type { ImportRow } from "./import";
 import type {
   ActivityEntry,
   CompanyHoliday,
@@ -93,6 +94,7 @@ interface StoreState {
   setLeadStage: (leadId: string, stage: Lead["stage"]) => void;
   setLeadPlan: (leadId: string, planId: string, mandateDate: string) => void;
   createLead: (input: NewLeadInput) => Lead | null;
+  importLeads: (rows: ImportRow[], sourceLabel: string) => { count: number; toOwnAccount: number };
   deleteLead: (leadId: string) => void;
   deleteAccount: (accountName: string) => void;
 
@@ -272,6 +274,69 @@ export const useStore = create<StoreState>((set, get) => ({
 
     set((s) => ({ leads: [...s.leads, lead] }));
     return lead;
+  },
+
+  importLeads: (rows, sourceLabel) => {
+    const state = get();
+    const me = state.currentUser();
+    let max = state.leads.reduce((m, l) => Math.max(m, Number(l.id.replace(/\D/g, "")) || 0), 0);
+    const today = isoToday();
+    let toOwnAccount = 0;
+    const workingLeads = [...state.leads];
+
+    const newLeads: Lead[] = rows.map((r) => {
+      max++;
+      const { existingOwner, assignee } = resolveNewContactOwner(
+        workingLeads,
+        r.account,
+        state.currentUserId,
+        state.isManager()
+      );
+      if (assignee === state.currentUserId && !state.isManager()) toOwnAccount++;
+      const noteBits = [`Imported from ${sourceLabel} by ${me.name}.`];
+      if (existingOwner && existingOwner !== state.currentUserId) {
+        noteBits.push(`Account already owned by ${repById(existingOwner)?.name} — kept with them.`);
+      }
+      if (r.notes) noteBits.push(`Note: ${r.notes}`);
+      const emailQuality: EmailQuality = !r.email ? "none" : /^y/i.test(r.verified) ? "verified" : "catchall";
+
+      const lead: Lead = {
+        id: "L" + String(max).padStart(3, "0"),
+        name: r.name,
+        title: r.title,
+        account: r.account,
+        type: r.type,
+        email: r.email || "",
+        phone: r.phone || "",
+        city: r.city || "—",
+        emailQuality,
+        multiSource: false,
+        priorityOverride: null,
+        priorityAuto: "Low",
+        score: 0,
+        scoreReasons: [],
+        stage: "new",
+        assignee,
+        ownerSince: assignee ? today : null,
+        nextFollowup: null,
+        meetings: [],
+        createdAt: today,
+        plan: null,
+        mandateDate: null,
+        stageHistory: [{ stage: "new", date: today }],
+        wonAt: null,
+        activity: [activityEntry("System", noteBits.join(" "))],
+      };
+      const { score, reasons } = scoreLead(lead);
+      lead.score = score;
+      lead.scoreReasons = reasons;
+      lead.priorityAuto = bandForScore(score);
+      workingLeads.push(lead);
+      return lead;
+    });
+
+    set((s) => ({ leads: [...s.leads, ...newLeads] }));
+    return { count: newLeads.length, toOwnAccount };
   },
 
   // Leads are the single source of truth — deleting the last contact at an
