@@ -41,7 +41,9 @@ export function scoreLead(l: ScoreInput): ScoreResult {
     score += 4;
     reasons.push("catch-all email (+4)");
   }
-  if (l.city === "Bengaluru") {
+  // Imported sheets spell the flagship city every which way.
+  const city = l.city.trim().toLowerCase();
+  if (city === "bengaluru" || city === "bangalore") {
     score += 10;
     reasons.push("flagship city (+10)");
   }

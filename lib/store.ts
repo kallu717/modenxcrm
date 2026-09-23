@@ -44,8 +44,23 @@ function accountNameTaken(leads: Lead[], name: string, except: string): boolean 
   return n !== except.toLowerCase() && leads.some((l) => l.account.toLowerCase() === n);
 }
 
+// Email is the duplicate key for imports, so two leads can't share one.
+function emailTaken(leads: Lead[], email: string, exceptLeadId: string): boolean {
+  const e = email.trim().toLowerCase();
+  return !!e && leads.some((l) => l.id !== exceptLeadId && (l.email || "").toLowerCase() === e);
+}
+
 function activityEntry(who: string, txt: string): ActivityEntry {
   return { who, txt, t: "just now", date: isoToday(), method: null };
+}
+
+// A contact joining an existing account — however its name was typed —
+// takes that account's exact name and type, so one account never splits
+// into two, or ends up both a Brand and a Mall.
+function matchExistingAccount(leads: Lead[], name: string): { account: string; type: Lead["type"] } | null {
+  const n = name.trim().toLowerCase();
+  const hit = leads.find((l) => l.account.toLowerCase() === n);
+  return hit ? { account: hit.account, type: hit.type } : null;
 }
 
 function resolveNewContactOwner(
@@ -133,7 +148,7 @@ interface StoreState {
   pendingRequestFor: (leadId: string) => LeadChangeRequest | null;
   pendingAccountRequestFor: (accountName: string) => AccountChangeRequest | null;
   pendingRequests: () => ChangeRequest[];
-  saveLeadEdit: (leadId: string, changes: LeadChangeRequest["changes"]) => void;
+  saveLeadEdit: (leadId: string, changes: LeadChangeRequest["changes"]) => string | null;
   saveAccountEdit: (accountName: string, changes: AccountChangeRequest["changes"]) => string | null;
   applyChangeRequest: (crId: string, approve: boolean) => void;
 
@@ -372,9 +387,12 @@ export const useStore = create<StoreState>((set, get) => ({
     const id = "L" + String(max + 1).padStart(3, "0");
     const today = isoToday();
     const me = state.currentUser();
+    const match = matchExistingAccount(state.leads, input.account);
+    const account = match ? match.account : input.account.trim();
+    const type = match ? match.type : input.type;
     const { existingOwner, assignee } = resolveNewContactOwner(
       state.leads,
-      input.account,
+      account,
       state.currentUserId,
       state.isManager()
     );
@@ -390,8 +408,8 @@ export const useStore = create<StoreState>((set, get) => ({
       id,
       name: input.name,
       title: input.title,
-      account: input.account,
-      type: input.type,
+      account,
+      type,
       email: input.email || "",
       phone: input.phone || "",
       city: input.city || "—",
@@ -432,9 +450,13 @@ export const useStore = create<StoreState>((set, get) => ({
 
     const newLeads: Lead[] = rows.map((r) => {
       max++;
+      // Checked against rows added earlier in this same sheet too.
+      const match = matchExistingAccount(workingLeads, r.account);
+      const account = match ? match.account : r.account.trim();
+      const type = match ? match.type : r.type;
       const { existingOwner, assignee } = resolveNewContactOwner(
         workingLeads,
-        r.account,
+        account,
         state.currentUserId,
         state.isManager()
       );
@@ -450,8 +472,8 @@ export const useStore = create<StoreState>((set, get) => ({
         id: "L" + String(max).padStart(3, "0"),
         name: r.name,
         title: r.title,
-        account: r.account,
-        type: r.type,
+        account,
+        type,
         email: r.email || "",
         phone: r.phone || "",
         city: r.city || "—",
@@ -524,7 +546,11 @@ export const useStore = create<StoreState>((set, get) => ({
     set((s) => ({
       leads: s.leads.map((l) => {
         if (l.id !== leadId) return l;
-        const nextFollowup = isoPlusDays(l.nextFollowup || isoToday(), days);
+        // An overdue follow-up snoozes from today — adding a week to a date
+        // that's already weeks gone would leave it overdue.
+        const today = isoToday();
+        const from = l.nextFollowup && l.nextFollowup > today ? l.nextFollowup : today;
+        const nextFollowup = isoPlusDays(from, days);
         return {
           ...l,
           nextFollowup,
@@ -604,7 +630,10 @@ export const useStore = create<StoreState>((set, get) => ({
   // touches anything. A manager editing directly writes immediately.
   saveLeadEdit: (leadId, changes) => {
     const state = get();
-    if (!Object.keys(changes).length) return;
+    if (!Object.keys(changes).length) return null;
+    if (changes.email && emailTaken(state.leads, changes.email.to, leadId)) {
+      return "Another lead already has that email";
+    }
     const me = state.currentUser();
     if (state.isManager()) {
       set((s) => ({
@@ -651,6 +680,7 @@ export const useStore = create<StoreState>((set, get) => ({
         ),
       }));
     }
+    return null;
   },
 
   saveAccountEdit: (accountName, changes) => {
@@ -753,6 +783,11 @@ export const useStore = create<StoreState>((set, get) => ({
         }),
       }));
     } else {
+      const newEmail = cr.changes.email?.to;
+      if (approve && newEmail && emailTaken(state.leads, newEmail, cr.leadId)) {
+        state.showToast(`Can't approve — another lead already uses ${newEmail}`);
+        return;
+      }
       const fields = Object.keys(cr.changes)
         .map((k) => EDITABLE_FIELDS.find((f) => f.key === k)?.label)
         .join(", ");

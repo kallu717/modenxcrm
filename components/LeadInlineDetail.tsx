@@ -47,12 +47,17 @@ export default function LeadInlineDetail({ lead }: { lead: Lead }) {
         changes[f.key] = { from: String(lead[f.key as EditableLeadField]), to: val };
       }
     });
-    setEditing(false);
     if (!Object.keys(changes).length) {
+      setEditing(false);
       showToast("Nothing changed");
       return;
     }
-    saveLeadEdit(lead.id, changes);
+    const error = saveLeadEdit(lead.id, changes);
+    if (error) {
+      showToast(error);
+      return;
+    }
+    setEditing(false);
     showToast(isManager ? "Changes saved" : "Sent to manager for approval");
   };
 
