@@ -1,4 +1,5 @@
-import type { AccountType } from "./types";
+import * as XLSX from "xlsx";
+import type { AccountType, Lead } from "./types";
 
 export const IMPORT_COLUMNS = [
   { key: "name", header: "Contact name", required: true, example: "Ananya Sharma" },
@@ -26,87 +27,79 @@ export interface ImportRow {
   notes: string;
 }
 
-function splitDelimited(line: string, delimiter: string): string[] {
-  const out: string[] = [];
-  let cur = "";
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        cur += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (ch === delimiter && !inQuotes) {
-      out.push(cur);
-      cur = "";
-    } else {
-      cur += ch;
-    }
-  }
-  out.push(cur);
-  return out.map((s) => s.trim());
-}
-
-export interface ParsedImport {
+export interface StagedImport {
   rows: ImportRow[];
-  errors: string[];
+  filename: string;
+  newAccounts: number;
+  duplicates: number;
+  rejected: number;
+  issues: string[];
 }
 
-// Accepts CSV or tab-separated (pasted from a spreadsheet). The header row
-// must match IMPORT_COLUMNS' headers, in any order.
-export function parseImportText(text: string): ParsedImport {
-  const lines = text.split(/\r\n|\n|\r/).filter((l) => l.trim().length);
-  if (!lines.length) return { rows: [], errors: ["No data found."] };
+export function templateTsv(withExample: boolean): string {
+  const head = IMPORT_COLUMNS.map((c) => c.header).join("\t");
+  return withExample ? head + "\n" + IMPORT_COLUMNS.map((c) => c.example).join("\t") : head;
+}
 
-  const delimiter = lines[0].includes("\t") ? "\t" : ",";
-  const header = splitDelimited(lines[0], delimiter).map((h) => h.toLowerCase());
-  const colIndex: Partial<Record<string, number>> = {};
-  IMPORT_COLUMNS.forEach((c) => {
-    const idx = header.findIndex((h) => h === c.header.toLowerCase());
-    if (idx >= 0) colIndex[c.key] = idx;
-  });
+// Reads .xlsx, .xls or .csv — first sheet, row 1 as headers.
+export async function readSheet(file: File): Promise<Record<string, unknown>[]> {
+  const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+  return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+}
 
-  const missingRequired = IMPORT_COLUMNS.filter((c) => c.required && colIndex[c.key] === undefined);
-  if (missingRequired.length) {
-    return {
-      rows: [],
-      errors: [`Missing required column(s): ${missingRequired.map((c) => c.header).join(", ")}`],
-    };
-  }
-
+// Validate everything before touching app state, so a bad sheet can't
+// half-import. Emails already in the CRM (or repeated within the sheet) are
+// skipped as duplicates.
+export function stageImport(raw: Record<string, unknown>[], filename: string, existing: Lead[]): StagedImport {
+  const headerFor: Record<string, string> = {};
+  IMPORT_COLUMNS.forEach((c) => (headerFor[c.header.toLowerCase()] = c.key));
+  const existingEmails = new Set(existing.map((l) => (l.email || "").toLowerCase()).filter(Boolean));
+  const seen = new Set<string>();
   const rows: ImportRow[] = [];
-  const errors: string[] = [];
-  lines.slice(1).forEach((line, i) => {
-    const cells = splitDelimited(line, delimiter);
-    const get = (key: string) => {
-      const idx = colIndex[key];
-      return idx === undefined ? "" : (cells[idx] || "").trim();
-    };
-    const name = get("name");
-    const title = get("title");
-    const account = get("account");
-    const typeRaw = get("type");
-    const type = VALID_TYPES.find((t) => t.toLowerCase() === typeRaw.toLowerCase());
+  const issues: string[] = [];
+  let duplicates = 0;
 
-    if (!name || !title || !account || !type) {
-      errors.push(`Row ${i + 2}: missing a required field or invalid account type ("${typeRaw}").`);
+  raw.forEach((obj, i) => {
+    const rowNo = i + 2; // row 1 is the header
+    const r: Record<string, string> = {};
+    Object.entries(obj).forEach(([k, v]) => {
+      const key = headerFor[String(k).trim().toLowerCase()];
+      if (key) r[key] = String(v ?? "").trim();
+    });
+    const missing = IMPORT_COLUMNS.filter((c) => c.required && !r[c.key]).map((c) => c.header);
+    if (missing.length) {
+      issues.push(`Row ${rowNo}: missing ${missing.join(", ")}`);
       return;
     }
+    const type = VALID_TYPES.find((t) => t.toLowerCase() === r.type.toLowerCase());
+    if (!type) {
+      issues.push(`Row ${rowNo}: account type "${r.type}" must be Brand, Mall or Store`);
+      return;
+    }
+    const email = (r.email || "").toLowerCase();
+    if (email && (existingEmails.has(email) || seen.has(email))) {
+      duplicates++;
+      issues.push(`Row ${rowNo}: ${r.email} already exists — skipped`);
+      return;
+    }
+    if (email) seen.add(email);
     rows.push({
-      name,
-      title,
-      account,
+      name: r.name,
+      title: r.title,
+      account: r.account,
       type,
-      email: get("email"),
-      verified: get("verified"),
-      phone: get("phone"),
-      city: get("city"),
-      notes: get("notes"),
+      email: r.email || "",
+      verified: r.verified || "",
+      phone: r.phone || "",
+      city: r.city || "",
+      notes: r.notes || "",
     });
   });
 
-  return { rows, errors };
+  const existingAccounts = new Set(existing.map((l) => l.account.toLowerCase()));
+  const newAccounts = new Set(
+    rows.map((r) => r.account).filter((a) => !existingAccounts.has(a.toLowerCase()))
+  ).size;
+
+  return { rows, filename, newAccounts, duplicates, rejected: issues.length - duplicates, issues };
 }

@@ -8,6 +8,7 @@ import type { Lead } from "@/lib/types";
 
 export default function WonModal({ lead, onClose }: { lead: Lead; onClose: () => void }) {
   const setLeadPlan = useStore((s) => s.setLeadPlan);
+  const showToast = useStore((s) => s.showToast);
   const [chosen, setChosen] = useState<string | null>(lead.plan);
   const [mandateDate, setMandateDate] = useState(lead.mandateDate || isoToday());
 
@@ -86,6 +87,8 @@ export default function WonModal({ lead, onClose }: { lead: Lead; onClose: () =>
             onClick={() => {
               if (!chosen) return;
               setLeadPlan(lead.id, chosen, mandateDate || isoToday());
+              const p = PLANS.find((x) => x.id === chosen);
+              if (p) showToast(`${p.name} · ${fmtInr(p.mrr)}/mo mandate created`);
               onClose();
             }}
           >

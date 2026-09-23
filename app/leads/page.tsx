@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { use, useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { EMPTY_FILTERS, filterLeads, type FilterState } from "@/lib/filters";
 import FilterBar from "@/components/FilterBar";
@@ -9,7 +9,9 @@ import LeadsTable from "@/components/LeadsTable";
 import NewLeadModal from "@/components/NewLeadModal";
 import ImportModal from "@/components/ImportModal";
 
-export default function LeadsPage() {
+export default function LeadsPage({ searchParams }: PageProps<"/leads">) {
+  const { assignee } = use(searchParams);
+  const assigneeParam = typeof assignee === "string" ? assignee : "";
   const leads = useStore((s) => s.leads);
   const isManager = useStore((s) => s.isManager());
   const currentUserId = useStore((s) => s.currentUserId);
@@ -17,7 +19,14 @@ export default function LeadsPage() {
     () => (isManager ? leads : leads.filter((l) => l.assignee === currentUserId)),
     [leads, isManager, currentUserId]
   );
-  const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<FilterState>({ ...EMPTY_FILTERS, assignee: assigneeParam });
+
+  // The "unassigned" pill links here while this page may already be open.
+  const [seenParam, setSeenParam] = useState(assigneeParam);
+  if (assigneeParam !== seenParam) {
+    setSeenParam(assigneeParam);
+    if (assigneeParam) setFilters((f) => ({ ...f, assignee: assigneeParam }));
+  }
   const [showNewLead, setShowNewLead] = useState(false);
   const [showImport, setShowImport] = useState(false);
 
@@ -36,7 +45,7 @@ export default function LeadsPage() {
           </h1>
           <p className="text-[12.5px] mt-0.5" style={{ color: "var(--muted)" }}>
             {isManager
-              ? "Every lead — assigned or not. Assign a rep right from a lead's detail panel."
+              ? "Every lead — assigned or not. Owners are set per account, from Accounts."
               : "Your assigned leads, in one sortable list."}
           </p>
         </div>

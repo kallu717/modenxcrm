@@ -20,11 +20,14 @@ export default function AccountDrawer({
   accountName,
   onClose,
   onOpenLead,
+  onRenamed,
 }: {
   accountName: string;
   onClose: () => void;
   onOpenLead: (id: string) => void;
+  onRenamed: (newName: string) => void;
 }) {
+  const showToast = useStore((s) => s.showToast);
   const leads = useStore((s) => s.leads);
   const isManager = useStore((s) => s.isManager());
   const currentUserId = useStore((s) => s.currentUserId);
@@ -58,16 +61,31 @@ export default function AccountDrawer({
   };
 
   const handleSaveEdit = () => {
+    const newName = editName.trim();
     const changes: Record<string, { from: string; to: string }> = {};
-    if (editName.trim() && editName.trim() !== account.name) {
-      changes.account = { from: account.name, to: editName.trim() };
+    if (newName !== account.name) changes.account = { from: account.name, to: newName };
+    if (editType !== account.type) changes.type = { from: account.type, to: editType };
+    if (!Object.keys(changes).length) {
+      setEditing(false);
+      showToast("Nothing changed");
+      return;
     }
-    if (editType !== account.type) {
-      changes.type = { from: account.type, to: editType };
+    const error = saveAccountEdit(
+      account.name,
+      changes as Partial<Record<EditableAccountField, { from: string; to: string }>>
+    );
+    if (error) {
+      showToast(error);
+      return;
     }
     setEditing(false);
-    if (!Object.keys(changes).length) return;
-    saveAccountEdit(account.name, changes as Partial<Record<EditableAccountField, { from: string; to: string }>>);
+    if (isManager) {
+      showToast("Account updated");
+      // The drawer is keyed by name, so follow a rename instead of vanishing.
+      if (changes.account) onRenamed(newName);
+    } else {
+      showToast("Sent to manager for approval");
+    }
   };
 
   return (
@@ -142,7 +160,9 @@ export default function AccountDrawer({
             <select
               value={account.owner || ""}
               onChange={(e) => {
-                assignAccount(account.name, e.target.value || null);
+                const repId = e.target.value || null;
+                assignAccount(account.name, repId);
+                showToast(repId ? `${account.name} assigned to ${repById(repId)?.name}` : `${account.name} unassigned`);
               }}
               className="px-2.5 py-1.5 rounded-md text-[13px] border"
               style={{ borderColor: "var(--grid)", background: "var(--surface)", color: "var(--ink)" }}
@@ -243,12 +263,16 @@ export default function AccountDrawer({
           ) : (
             <>
               <dl className="text-[12.5px] space-y-1">
-                {ACCOUNT_EDITABLE_FIELDS.map((f) => (
-                  <div key={f.key} className="flex justify-between gap-3">
-                    <dt style={{ color: "var(--muted)" }}>{f.label}</dt>
-                    <dd style={{ color: "var(--ink)" }}>
-                      {f.key === "account" ? account.name : account.type}
-                    </dd>
+                {[
+                  ...ACCOUNT_EDITABLE_FIELDS.map((f) => [f.label, f.key === "account" ? account.name : account.type]),
+                  ["Domain", account.domain],
+                  ["Locations", account.cities.join(", ")],
+                  ["In CRM since", fmtShortDate(account.firstSeen)],
+                  ["Meetings scheduled", String(account.openMeetings)],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex justify-between gap-3">
+                    <dt style={{ color: "var(--muted)" }}>{label}</dt>
+                    <dd style={{ color: "var(--ink)" }}>{value}</dd>
                   </div>
                 ))}
               </dl>
@@ -286,6 +310,7 @@ export default function AccountDrawer({
                       )
                     ) {
                       deleteAccount(account.name);
+                      showToast(`${account.name} and ${account.contacts.length} contact(s) deleted`);
                       onClose();
                     }
                   }}
@@ -392,7 +417,12 @@ export default function AccountDrawer({
                           style={{ color: "var(--muted)" }}
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (confirm(`Delete ${c.name}? This can't be undone.`)) deleteLead(c.id);
+                            if (confirm(`Delete ${c.name}? This can't be undone.`)) {
+                              deleteLead(c.id);
+                              showToast(`${c.name} deleted`);
+                              // Last contact gone means the account itself is gone.
+                              if (account.contacts.length === 1) onClose();
+                            }
                           }}
                         >
                           ✕

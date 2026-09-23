@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
-import { STAGES, repsList, repById } from "@/lib/constants";
+import { STAGES, repsList } from "@/lib/constants";
 import { RANGE_PRESETS, rangeForPreset, workingRangeForRep } from "@/lib/calendar";
 import { computeRepStats, computeFunnel, computeStageAging } from "@/lib/reports";
 import { buildAccounts } from "@/lib/accounts";
@@ -43,7 +43,7 @@ export default function ReportsPage() {
     () => rangeForPreset(rangePreset, customFrom, customTo),
     [rangePreset, customFrom, customTo]
   );
-  const reps = repsList();
+  const reps = useMemo(() => repsList(), []);
 
   const rangeLabelLower = useMemo(() => {
     const p = RANGE_PRESETS.find((x) => x.id === rangePreset);

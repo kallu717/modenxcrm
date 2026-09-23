@@ -1,8 +1,8 @@
 import { create } from "zustand";
-import { isoToday, isoPlusDays, fmtShortDate, fmtFollowup } from "./dates";
+import { isoToday, isoPlusDays, fmtShortDate, fmtFollowup, to12h } from "./dates";
 import { scoreLead, bandForScore } from "./scoring";
 import { PLANS, fmtInr, leadMrr } from "./revenue";
-import { REPS, EDITABLE_FIELDS, ACCOUNT_EDITABLE_FIELDS, repById } from "./constants";
+import { REPS, STAGES, EDITABLE_FIELDS, ACCOUNT_EDITABLE_FIELDS, repById } from "./constants";
 import { generateSeed } from "./seed";
 import type { ImportRow } from "./import";
 import type {
@@ -38,6 +38,11 @@ export interface AccountChangeRequest extends ChangeRequestBase {
   changes: Partial<Record<EditableAccountField, { from: string; to: string }>>;
 }
 export type ChangeRequest = LeadChangeRequest | AccountChangeRequest;
+
+function accountNameTaken(leads: Lead[], name: string, except: string): boolean {
+  const n = name.trim().toLowerCase();
+  return n !== except.toLowerCase() && leads.some((l) => l.account.toLowerCase() === n);
+}
 
 function activityEntry(who: string, txt: string): ActivityEntry {
   return { who, txt, t: "just now", date: isoToday(), method: null };
@@ -90,8 +95,24 @@ interface StoreState {
   // ---- assignment ----
   assignAccount: (accountName: string, repId: string | null) => void;
 
+  // ---- auth (placeholder until Entra ID SSO is wired in) ----
+  isAuthenticated: boolean;
+  authReady: boolean;
+  hydrateAuth: () => void;
+  login: () => void;
+  logout: () => void;
+
+  // ---- feedback ----
+  toast: { id: number; msg: string } | null;
+  showToast: (msg: string) => void;
+
   // ---- lead lifecycle ----
-  setLeadStage: (leadId: string, stage: Lead["stage"]) => void;
+  setLeadStage: (leadId: string, stage: Lead["stage"], source?: "board" | "drawer") => void;
+  setPriority: (leadId: string, priority: Lead["priorityAuto"] | null) => void;
+  setNextFollowup: (leadId: string, iso: string | null) => void;
+  addMeeting: (leadId: string, m: { date: string; time: string; mode: string; notes: string }) => void;
+  setMeetingStatus: (leadId: string, meetingId: string, status: "done" | "cancelled") => void;
+  addNote: (leadId: string, txt: string, method: string) => void;
   setLeadPlan: (leadId: string, planId: string, mandateDate: string) => void;
   createLead: (input: NewLeadInput) => Lead | null;
   importLeads: (rows: ImportRow[], sourceLabel: string) => { count: number; toOwnAccount: number };
@@ -113,7 +134,7 @@ interface StoreState {
   pendingAccountRequestFor: (accountName: string) => AccountChangeRequest | null;
   pendingRequests: () => ChangeRequest[];
   saveLeadEdit: (leadId: string, changes: LeadChangeRequest["changes"]) => void;
-  saveAccountEdit: (accountName: string, changes: AccountChangeRequest["changes"]) => void;
+  saveAccountEdit: (accountName: string, changes: AccountChangeRequest["changes"]) => string | null;
   applyChangeRequest: (crId: string, approve: boolean) => void;
 
   // ---- leave ----
@@ -143,6 +164,33 @@ export const useStore = create<StoreState>((set, get) => ({
   lrSeq: 0,
   paymentReminders: {},
   targets: Object.fromEntries(REPS.filter((r) => r.role === "Rep").map((r) => [r.id, { callsPerDay: 8 }])),
+
+  // Placeholder only: there's no real session yet. The flag survives a page
+  // refresh via sessionStorage; Phase 2 replaces this with an Entra ID session.
+  isAuthenticated: false,
+  authReady: false,
+  hydrateAuth: () => {
+    let authed = false;
+    try {
+      authed = sessionStorage.getItem("modenx-auth") === "1";
+    } catch {}
+    set({ isAuthenticated: authed, authReady: true });
+  },
+  login: () => {
+    try {
+      sessionStorage.setItem("modenx-auth", "1");
+    } catch {}
+    set({ isAuthenticated: true, currentUserId: "meera" });
+  },
+  logout: () => {
+    try {
+      sessionStorage.removeItem("modenx-auth");
+    } catch {}
+    set({ isAuthenticated: false });
+  },
+
+  toast: null,
+  showToast: (msg) => set({ toast: { id: Date.now(), msg } }),
 
   currentUser: () => repById(get().currentUserId) || get().reps[0],
   isManager: () => get().currentUser().role === "Manager",
@@ -193,18 +241,99 @@ export const useStore = create<StoreState>((set, get) => ({
     });
   },
 
-  setLeadStage: (leadId, stage) => {
+  setLeadStage: (leadId, stage, source = "drawer") => {
+    const me = get().currentUser();
     set((state) => ({
       leads: state.leads.map((l) => {
-        if (l.id !== leadId) return l;
-        const wonAt = stage === "won" ? isoToday() : l.wonAt ? null : l.wonAt;
+        if (l.id !== leadId || l.stage === stage) return l;
+        const fromName = STAGES.find((s) => s.id === l.stage)?.name;
+        const toName = STAGES.find((s) => s.id === stage)?.name;
+        const txt = source === "board" ? `Moved from ${fromName} to ${toName}.` : `Stage set to ${toName}.`;
         return {
           ...l,
           stage,
           stageHistory: [...l.stageHistory, { stage, date: isoToday() }],
-          wonAt,
+          // Moving off Won means it no longer counts as onboarded.
+          wonAt: stage === "won" ? isoToday() : null,
+          activity: [activityEntry(me.name, txt), ...l.activity],
         };
       }),
+    }));
+  },
+
+  setPriority: (leadId, priority) => {
+    const me = get().currentUser();
+    set((s) => ({
+      leads: s.leads.map((l) => {
+        if (l.id !== leadId) return l;
+        // Picking the auto band clears the override rather than pinning it.
+        const override = priority && priority !== l.priorityAuto ? priority : null;
+        if (override === l.priorityOverride) return l;
+        const txt = override
+          ? `Priority manually set to ${override}.`
+          : `Priority reset to auto (${l.priorityAuto}).`;
+        return { ...l, priorityOverride: override, activity: [activityEntry(me.name, txt), ...l.activity] };
+      }),
+    }));
+  },
+
+  setNextFollowup: (leadId, iso) => {
+    const me = get().currentUser();
+    set((s) => ({
+      leads: s.leads.map((l) => {
+        if (l.id !== leadId) return l;
+        const txt = iso ? `Next follow-up set to ${fmtFollowup(iso)}.` : "Follow-up cleared.";
+        return { ...l, nextFollowup: iso, activity: [activityEntry(me.name, txt), ...l.activity] };
+      }),
+    }));
+  },
+
+  addMeeting: (leadId, m) => {
+    const me = get().currentUser();
+    set((s) => ({
+      leads: s.leads.map((l) => {
+        if (l.id !== leadId) return l;
+        const time = to12h(m.time);
+        return {
+          ...l,
+          meetings: [
+            ...l.meetings,
+            { id: "MTG" + Date.now(), date: m.date, time, mode: m.mode, notes: m.notes || "No agenda added.", status: "scheduled" as const },
+          ],
+          activity: [
+            activityEntry(me.name, `Meeting scheduled for ${fmtFollowup(m.date)}, ${time} (${m.mode}).`),
+            ...l.activity,
+          ],
+        };
+      }),
+    }));
+  },
+
+  setMeetingStatus: (leadId, meetingId, status) => {
+    const me = get().currentUser();
+    set((s) => ({
+      leads: s.leads.map((l) => {
+        if (l.id !== leadId) return l;
+        const mtg = l.meetings.find((x) => x.id === meetingId);
+        if (!mtg) return l;
+        return {
+          ...l,
+          meetings: l.meetings.map((x) => (x.id === meetingId ? { ...x, status } : x)),
+          activity: [activityEntry(me.name, `Meeting on ${fmtFollowup(mtg.date)} marked ${status}.`), ...l.activity],
+        };
+      }),
+    }));
+  },
+
+  // The contact method is what Reports counts for WhatsApp/Email activity.
+  addNote: (leadId, txt, method) => {
+    const me = get().currentUser();
+    set((s) => ({
+      leads: s.leads.map((l) =>
+        l.id === leadId
+          ? { ...l, activity: [{ who: me.name, txt, t: "just now", date: isoToday(), method }, ...l.activity] }
+          : l
+      ),
     }));
   },
 
@@ -373,12 +502,20 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   deleteAccount: (accountName) => {
-    set((state) => ({
-      leads: state.leads.filter((l) => l.account !== accountName),
-      changeRequests: state.changeRequests.filter(
-        (c) => !(c.scope === "account" && c.accountName === accountName)
-      ),
-    }));
+    set((state) => {
+      const removedIds = new Set(state.leads.filter((l) => l.account === accountName).map((l) => l.id));
+      const paymentReminders = Object.fromEntries(
+        Object.entries(state.paymentReminders).filter(([id]) => !removedIds.has(id))
+      );
+      return {
+        leads: state.leads.filter((l) => !removedIds.has(l.id)),
+        // Contact-level edit requests go too, or they'd linger as ghost approvals.
+        changeRequests: state.changeRequests.filter((c) =>
+          c.scope === "account" ? c.accountName !== accountName : !removedIds.has(c.leadId)
+        ),
+        paymentReminders,
+      };
+    });
   },
 
   snoozeFollowup: (leadId, days) => {
@@ -485,9 +622,9 @@ export const useStore = create<StoreState>((set, get) => ({
         }),
       }));
     } else {
-      state.crSeq++;
+      const nextSeq = state.crSeq + 1;
       const cr: LeadChangeRequest = {
-        id: "CR" + String(state.crSeq).padStart(3, "0"),
+        id: "CR" + String(nextSeq).padStart(3, "0"),
         scope: "lead",
         leadId,
         requestedBy: state.currentUserId,
@@ -500,7 +637,7 @@ export const useStore = create<StoreState>((set, get) => ({
         .join(", ");
       set((s) => ({
         changeRequests: [...s.changeRequests, cr],
-        crSeq: s.crSeq + 1,
+        crSeq: nextSeq,
         leads: s.leads.map((l) =>
           l.id === leadId
             ? {
@@ -518,7 +655,14 @@ export const useStore = create<StoreState>((set, get) => ({
 
   saveAccountEdit: (accountName, changes) => {
     const state = get();
-    if (!Object.keys(changes).length) return;
+    if (!Object.keys(changes).length) return null;
+    const newName = changes.account?.to.trim();
+    if (changes.account && !newName) return "Account name can't be empty";
+    // Renaming onto an existing account would merge two accounts that may have
+    // different owners — that breaks 1 account = 1 rep, so it's refused.
+    if (newName && accountNameTaken(state.leads, newName, accountName)) {
+      return "Another account already has that name";
+    }
     const me = state.currentUser();
     const fields = Object.keys(changes)
       .map((k) => ACCOUNT_EDITABLE_FIELDS.find((f) => f.key === k)?.label)
@@ -537,9 +681,9 @@ export const useStore = create<StoreState>((set, get) => ({
       }));
     } else {
       set((s) => {
-        s.crSeq++;
+        const nextSeq = s.crSeq + 1;
         const cr: AccountChangeRequest = {
-          id: "CR" + String(s.crSeq).padStart(3, "0"),
+          id: "CR" + String(nextSeq).padStart(3, "0"),
           scope: "account",
           accountName,
           requestedBy: s.currentUserId,
@@ -549,7 +693,7 @@ export const useStore = create<StoreState>((set, get) => ({
         };
         return {
           changeRequests: [...s.changeRequests, cr],
-          crSeq: s.crSeq,
+          crSeq: nextSeq,
           leads: s.leads.map((l) =>
             l.account === accountName
               ? {
@@ -567,6 +711,7 @@ export const useStore = create<StoreState>((set, get) => ({
         };
       });
     }
+    return null;
   },
 
   applyChangeRequest: (crId, approve) => {
@@ -576,6 +721,13 @@ export const useStore = create<StoreState>((set, get) => ({
     const me = state.currentUser();
 
     if (cr.scope === "account") {
+      // Re-check at approval time — another account may have taken the name
+      // since the rep filed the request.
+      const newName = cr.changes.account?.to;
+      if (approve && newName && accountNameTaken(state.leads, newName, cr.accountName)) {
+        state.showToast(`Can't approve — another account is already named ${newName}`);
+        return;
+      }
       const fields = Object.keys(cr.changes)
         .map((k) => ACCOUNT_EDITABLE_FIELDS.find((f) => f.key === k)?.label)
         .join(", ");

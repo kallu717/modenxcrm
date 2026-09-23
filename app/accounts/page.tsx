@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { use, useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { EMPTY_FILTERS, filterLeads, type FilterState } from "@/lib/filters";
 import { buildAccounts } from "@/lib/accounts";
@@ -9,7 +9,9 @@ import AccountsTable from "@/components/AccountsTable";
 import AccountDrawer from "@/components/AccountDrawer";
 import LeadDrawer from "@/components/LeadDrawer";
 
-export default function AccountsPage() {
+export default function AccountsPage({ searchParams }: PageProps<"/accounts">) {
+  const { account } = use(searchParams);
+  const accountParam = typeof account === "string" ? account : null;
   const leads = useStore((s) => s.leads);
   const isManager = useStore((s) => s.isManager());
   const currentUserId = useStore((s) => s.currentUserId);
@@ -18,7 +20,14 @@ export default function AccountsPage() {
     [leads, isManager, currentUserId]
   );
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
-  const [openAccount, setOpenAccount] = useState<string | null>(null);
+  const [openAccount, setOpenAccount] = useState<string | null>(accountParam);
+
+  // "manage in Accounts" links land here with the account to open.
+  const [seenParam, setSeenParam] = useState(accountParam);
+  if (accountParam !== seenParam) {
+    setSeenParam(accountParam);
+    if (accountParam) setOpenAccount(accountParam);
+  }
   const [openLeadId, setOpenLeadId] = useState<string | null>(null);
 
   const cities = useMemo(
@@ -53,9 +62,11 @@ export default function AccountsPage() {
 
       {openAccount && (
         <AccountDrawer
+          key={openAccount}
           accountName={openAccount}
           onClose={() => setOpenAccount(null)}
           onOpenLead={(id) => setOpenLeadId(id)}
+          onRenamed={setOpenAccount}
         />
       )}
       {openLeadId && <LeadDrawer leadId={openLeadId} onClose={() => setOpenLeadId(null)} />}

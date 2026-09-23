@@ -56,6 +56,8 @@ export default function CalendarPage() {
   const removeLeave = useStore((s) => s.removeLeave);
   const decideLeaveRequest = useStore((s) => s.decideLeaveRequest);
   const submitLeaveRequest = useStore((s) => s.submitLeaveRequest);
+  const repLeaveOn = useStore((s) => s.repLeaveOn);
+  const showToast = useStore((s) => s.showToast);
 
   const [holDate, setHolDate] = useState("");
   const [holName, setHolName] = useState("");
@@ -80,32 +82,37 @@ export default function CalendarPage() {
 
   const handleAddHoliday = () => {
     if (!holDate || !holName.trim()) {
-      alert("Pick a date and name the holiday");
+      showToast("Pick a date and name the holiday");
       return;
     }
     const ok = addHoliday(holDate, holName.trim());
     if (!ok) {
-      alert("Already a holiday on that date");
+      showToast("Already a holiday on that date");
       return;
     }
     setHolDate("");
     setHolName("");
+    showToast("Holiday added");
   };
 
   const handleApply = () => {
     if (!myDate) {
-      alert("Pick a date");
+      showToast("Pick a date");
       return;
     }
     if (isWeekend(myDate)) {
-      alert("That's already a weekend");
+      showToast("That's already a weekend");
       return;
     }
+    const alreadyApproved = !!repLeaveOn(currentUserId, myDate);
     const ok = submitLeaveRequest(currentUserId, myDate, myReason.trim());
-    if (ok) {
-      setMyDate("");
-      setMyReason("");
+    if (!ok) {
+      showToast(alreadyApproved ? "Already approved for that day" : "Already requested for that day");
+      return;
     }
+    setMyDate("");
+    setMyReason("");
+    showToast("Leave request sent to your manager");
   };
 
   return (
@@ -216,7 +223,10 @@ export default function CalendarPage() {
                           type="button"
                           className="px-2.5 py-1 rounded text-[12px] text-white"
                           style={{ background: "var(--accent)" }}
-                          onClick={() => decideLeaveRequest(r.id, true)}
+                          onClick={() => {
+                            decideLeaveRequest(r.id, true);
+                            showToast(`Leave approved for ${rep?.name}`);
+                          }}
                         >
                           Approve
                         </button>
@@ -224,7 +234,10 @@ export default function CalendarPage() {
                           type="button"
                           className="px-2.5 py-1 rounded text-[12px] border"
                           style={{ borderColor: "var(--grid)", color: "var(--ink)" }}
-                          onClick={() => decideLeaveRequest(r.id, false)}
+                          onClick={() => {
+                            decideLeaveRequest(r.id, false);
+                            showToast("Leave request rejected");
+                          }}
                         >
                           Reject
                         </button>

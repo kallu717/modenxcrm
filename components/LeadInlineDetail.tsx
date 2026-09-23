@@ -21,16 +21,23 @@ export default function LeadInlineDetail({ lead }: { lead: Lead }) {
   const rep = repById(lead.assignee);
   const stage = STAGES.find((s) => s.id === lead.stage);
 
+  const showToast = useStore((s) => s.showToast);
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState<Record<EditableLeadField, string>>({
+  const currentValues = (): Record<EditableLeadField, string> => ({
     name: lead.name,
     title: lead.title,
     email: lead.email,
     phone: lead.phone,
     city: lead.city,
   });
+  const [form, setForm] = useState<Record<EditableLeadField, string>>(currentValues);
 
   const meetings = [...lead.meetings].sort((a, b) => (a.date < b.date ? -1 : 1));
+
+  const startEdit = () => {
+    setForm(currentValues());
+    setEditing(true);
+  };
 
   const handleSave = () => {
     const changes: Record<string, { from: string; to: string }> = {};
@@ -40,12 +47,13 @@ export default function LeadInlineDetail({ lead }: { lead: Lead }) {
         changes[f.key] = { from: String(lead[f.key as EditableLeadField]), to: val };
       }
     });
+    setEditing(false);
     if (!Object.keys(changes).length) {
-      setEditing(false);
+      showToast("Nothing changed");
       return;
     }
     saveLeadEdit(lead.id, changes);
-    setEditing(false);
+    showToast(isManager ? "Changes saved" : "Sent to manager for approval");
   };
 
   return (
@@ -145,7 +153,7 @@ export default function LeadInlineDetail({ lead }: { lead: Lead }) {
                       type="button"
                       className="px-2.5 py-1 rounded text-[12px] border"
                       style={{ borderColor: "var(--grid)", color: "var(--ink)" }}
-                      onClick={() => setEditing(true)}
+                      onClick={startEdit}
                     >
                       Edit contact details
                     </button>
@@ -161,7 +169,10 @@ export default function LeadInlineDetail({ lead }: { lead: Lead }) {
                     className="px-2.5 py-1 rounded text-[12px]"
                     style={{ border: "1px solid var(--crit)", color: "var(--crit)" }}
                     onClick={() => {
-                      if (confirm(`Delete ${lead.name}? This can't be undone.`)) deleteLead(lead.id);
+                      if (confirm(`Delete ${lead.name}? This can't be undone.`)) {
+                        deleteLead(lead.id);
+                        showToast(`${lead.name} deleted`);
+                      }
                     }}
                   >
                     Delete lead
@@ -192,7 +203,7 @@ export default function LeadInlineDetail({ lead }: { lead: Lead }) {
                 {isManager && (
                   <>
                     {" · "}
-                    <Link href="/accounts" className="underline" style={{ color: "var(--accent-ink)" }}>
+                    <Link href={`/accounts?account=${encodeURIComponent(lead.account)}`} className="underline" style={{ color: "var(--accent-ink)" }}>
                       manage in Accounts
                     </Link>
                   </>

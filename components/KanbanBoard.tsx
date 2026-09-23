@@ -120,6 +120,7 @@ function LeadCard({
 
 export default function KanbanBoard({ leads }: { leads: Lead[] }) {
   const setLeadStage = useStore((s) => s.setLeadStage);
+  const showToast = useStore((s) => s.showToast);
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<Stage | null>(null);
   const [expanded, setExpanded] = useState<Set<Stage>>(new Set());
@@ -158,9 +159,11 @@ export default function KanbanBoard({ leads }: { leads: Lead[] }) {
                 if (!dragId) return;
                 const lead = leads.find((l) => l.id === dragId);
                 if (lead && lead.stage !== stage.id) {
-                  setLeadStage(lead.id, stage.id);
+                  setLeadStage(lead.id, stage.id, "board");
                   if (stage.id === "won" && !lead.plan) {
                     setWonModalLead({ ...lead, stage: stage.id });
+                  } else {
+                    showToast(`${lead.name} → ${stage.name}`);
                   }
                 }
                 setDragId(null);

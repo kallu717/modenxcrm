@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { effectivePriority, isClosedStage } from "@/lib/scoring";
-import { followupBucket } from "@/lib/dates";
+import { followupBucket, isoToday } from "@/lib/dates";
 
 function Stat({ value, label, warn }: { value: number; label: string; warn?: boolean }) {
   return (
@@ -39,7 +39,8 @@ export default function StatsHeader() {
   const hot = isManager
     ? visibleLeads.filter((l) => effectivePriority(l) === "Hot" && !l.assignee).length
     : visibleLeads.filter((l) => effectivePriority(l) === "Hot" && !isClosedStage(l.stage)).length;
-  const won = visibleLeads.filter((l) => l.stage === "won").length;
+  const monthPrefix = isoToday().slice(0, 7);
+  const won = visibleLeads.filter((l) => l.stage === "won" && l.wonAt?.startsWith(monthPrefix)).length;
   const due = visibleLeads.filter(
     (l) =>
       l.nextFollowup &&

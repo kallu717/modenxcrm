@@ -16,8 +16,11 @@ export default function ContactedModal({ lead, onClose }: { lead: Lead; onClose:
     { label: "+1 week", iso: isoPlusDays(isoToday(), 7) },
   ];
 
+  const showToast = useStore((s) => s.showToast);
+
   const finish = (iso: string | null) => {
     markContacted(lead.id, iso);
+    showToast(iso ? "Next follow-up: " + fmtFollowup(iso) : `${lead.name} marked contacted — no further follow-up`);
     onClose();
   };
 

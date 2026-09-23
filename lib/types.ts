@@ -21,7 +21,7 @@ export interface Meeting {
   time: string;
   mode: string;
   notes: string;
-  status: "done" | "scheduled";
+  status: "done" | "scheduled" | "cancelled";
 }
 
 export type EmailQuality = "verified" | "catchall" | "none";

@@ -30,6 +30,7 @@ function Approvals({ onOpenLead }: { onOpenLead: (id: string) => void }) {
   const currentUserId = useStore((s) => s.currentUserId);
   const changeRequests = useStore((s) => s.changeRequests);
   const applyChangeRequest = useStore((s) => s.applyChangeRequest);
+  const showToast = useStore((s) => s.showToast);
   const leads = useStore((s) => s.leads);
 
   const mine = useMemo(() => {
@@ -106,7 +107,12 @@ function Approvals({ onOpenLead }: { onOpenLead: (id: string) => void }) {
                     type="button"
                     className="px-2.5 py-1 rounded text-[12px] text-white"
                     style={{ background: "var(--accent)" }}
-                    onClick={() => applyChangeRequest(cr.id, true)}
+                    onClick={() => {
+                      applyChangeRequest(cr.id, true);
+                      if (useStore.getState().changeRequests.find((c) => c.id === cr.id)?.status === "approved") {
+                        showToast("Change approved and applied");
+                      }
+                    }}
                   >
                     Approve
                   </button>
@@ -114,7 +120,10 @@ function Approvals({ onOpenLead }: { onOpenLead: (id: string) => void }) {
                     type="button"
                     className="px-2.5 py-1 rounded text-[12px] border"
                     style={{ borderColor: "var(--grid)", color: "var(--ink)" }}
-                    onClick={() => applyChangeRequest(cr.id, false)}
+                    onClick={() => {
+                      applyChangeRequest(cr.id, false);
+                      showToast("Change rejected — nothing was modified");
+                    }}
                   >
                     Reject
                   </button>
@@ -136,6 +145,7 @@ function Payments({ visibleLeads, onOpenLead }: { visibleLeads: Lead[]; onOpenLe
   const isManager = useStore((s) => s.isManager());
   const paymentReminders = useStore((s) => s.paymentReminders);
   const logPaymentReminder = useStore((s) => s.logPaymentReminder);
+  const showToast = useStore((s) => s.showToast);
 
   const due = useMemo(() => duePayments(visibleLeads, paymentReminders), [visibleLeads, paymentReminders]);
   if (!due.length) return null;
@@ -201,6 +211,7 @@ function Payments({ visibleLeads, onOpenLead }: { visibleLeads: Lead[]; onOpenLe
                 onClick={(e) => {
                   e.stopPropagation();
                   logPaymentReminder(lead.id, date);
+                  showToast("Reminder logged for " + lead.account);
                 }}
               >
                 Log reminder sent
@@ -224,6 +235,7 @@ export default function FollowupsPage() {
   const isManager = useStore((s) => s.isManager());
   const currentUserId = useStore((s) => s.currentUserId);
   const snoozeFollowup = useStore((s) => s.snoozeFollowup);
+  const showToast = useStore((s) => s.showToast);
   const visibleLeads = useMemo(
     () => (isManager ? leads : leads.filter((l) => l.assignee === currentUserId)),
     [leads, isManager, currentUserId]
@@ -354,7 +366,10 @@ export default function FollowupsPage() {
                             type="button"
                             className="px-2.5 py-1 rounded text-[12px] border"
                             style={{ borderColor: "var(--grid)", color: "var(--ink)" }}
-                            onClick={() => snoozeFollowup(l.id, 7)}
+                            onClick={() => {
+                              snoozeFollowup(l.id, 7);
+                              showToast(`Snoozed ${l.name} by a week`);
+                            }}
                           >
                             Snooze 1wk
                           </button>

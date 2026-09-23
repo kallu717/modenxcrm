@@ -12,6 +12,7 @@ const inputStyle = { borderColor: "var(--grid)", background: "var(--surface)", c
 export default function NewLeadModal({ onClose }: { onClose: () => void }) {
   const leads = useStore((s) => s.leads);
   const createLead = useStore((s) => s.createLead);
+  const showToast = useStore((s) => s.showToast);
 
   const [form, setForm] = useState({
     name: "",
@@ -61,6 +62,8 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
       setError("A lead with that email already exists.");
       return;
     }
+    const owner = repById(lead.assignee);
+    showToast(owner ? `${lead.name} added — assigned to ${owner.name}` : `${lead.name} added — unassigned`);
     onClose();
   };
 
