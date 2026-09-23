@@ -104,6 +104,10 @@ interface StoreState {
   paymentReminders: Record<string, string>;
   logPaymentReminder: (leadId: string, billingDate: string) => void;
 
+  // ---- targets (reports) ----
+  targets: Record<string, { callsPerDay: number }>;
+  setRepTarget: (repId: string, callsPerDay: number) => void;
+
   // ---- change requests ----
   pendingRequestFor: (leadId: string) => LeadChangeRequest | null;
   pendingAccountRequestFor: (accountName: string) => AccountChangeRequest | null;
@@ -133,6 +137,7 @@ export const useStore = create<StoreState>((set, get) => ({
   crSeq: 0,
   lrSeq: 0,
   paymentReminders: {},
+  targets: Object.fromEntries(REPS.filter((r) => r.role === "Rep").map((r) => [r.id, { callsPerDay: 8 }])),
 
   currentUser: () => repById(get().currentUserId) || get().reps[0],
   isManager: () => get().currentUser().role === "Manager",
@@ -429,6 +434,12 @@ export const useStore = create<StoreState>((set, get) => ({
             }
           : l
       ),
+    }));
+  },
+
+  setRepTarget: (repId, callsPerDay) => {
+    set((s) => ({
+      targets: { ...s.targets, [repId]: { callsPerDay: Math.max(0, callsPerDay || 0) } },
     }));
   },
 

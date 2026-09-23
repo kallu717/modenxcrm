@@ -64,6 +64,13 @@ export function fmtFollowup(iso: string | null): string {
   return label;
 }
 
+export function inRange(iso: string | null, from: string | null, to: string | null): boolean {
+  if (!iso) return false;
+  if (from && iso < from) return false;
+  if (to && iso > to) return false;
+  return true;
+}
+
 export function followupBucket(iso: string | null): "overdue" | "today" | "upcoming" | null {
   if (!iso) return null;
   const today = isoToday();
