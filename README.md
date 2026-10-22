@@ -1,36 +1,33 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ModenX CRM
 
-## Getting Started
+Sales CRM for ModenX: pipeline board, leads, accounts, follow-ups, reports,
+revenue and a working calendar, with managers and reps.
 
-First, run the development server:
+- **Front end:** Next.js 16 + React 19 + Zustand + Tailwind, in `app/`, `components/`, `lib/`. Tests in `tests/` (116, Vitest).
+- **Back end:** Python (FastAPI) + PostgreSQL in `backend/`. Azure Entra ID sign-in, REST API, server-enforced permissions. Tests in `backend/tests/` (29, pytest).
+- **Deploy scaffolding:** `deploy/` (Dockerfiles, nginx sample, compose) and `.github/workflows/ci.yml`.
+
+> Status: the back end is built and tested; the front end is not connected to it
+> yet and still runs on in-memory sample data. See [docs/PLAN.md](docs/PLAN.md).
+> Infrastructure needs are in [docs/DEVOPS.md](docs/DEVOPS.md).
+
+## Develop
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm ci
+npm run dev          # http://localhost:3000
+npm test             # 116 tests
+npm run lint && npx tsc --noEmit && npm run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Back end: see the "Run it locally" section of [docs/DEVOPS.md](docs/DEVOPS.md).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Layout
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+app/ components/ lib/ tests/     Next.js front end and its business logic
+backend/app                      FastAPI service (api.py, auth.py, models.py, scoring.py)
+backend/scripts/push_leads.py    load a Lead Desk export through the API
+deploy/                          Dockerfiles, nginx.conf, docker-compose.yml
+docs/                            PLAN.md (roadmap, decisions), DEVOPS.md (handoff)
+```
