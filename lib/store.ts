@@ -2,8 +2,8 @@ import { create } from "zustand";
 import { isoToday, isoPlusDays, fmtShortDate, fmtFollowup, to12h } from "./dates";
 import { scoreLead, bandForScore } from "./scoring";
 import { PLANS, fmtInr, leadMrr } from "./revenue";
-import { REPS, STAGES, EDITABLE_FIELDS, ACCOUNT_EDITABLE_FIELDS, repById } from "./constants";
-import { generateSeed } from "./seed";
+import { STAGES, EDITABLE_FIELDS, ACCOUNT_EDITABLE_FIELDS, repById } from "./constants";
+import { newId } from "./ids";
 import type { ImportRow } from "./import";
 import type {
   ActivityEntry,
@@ -94,9 +94,6 @@ interface StoreState {
   repLeaves: RepLeave[];
   leaveRequests: LeaveRequest[];
   changeRequests: ChangeRequest[];
-  leaveSeq: number;
-  crSeq: number;
-  lrSeq: number;
 
   // ---- derived / role helpers ----
   currentUser: () => Rep;
@@ -104,18 +101,8 @@ interface StoreState {
   visibleLeads: () => Lead[];
   accountManageable: (accountName: string) => boolean;
 
-  // ---- user ----
-  setCurrentUser: (repId: string) => void;
-
   // ---- assignment ----
   assignAccount: (accountName: string, repId: string | null) => void;
-
-  // ---- auth (placeholder until Entra ID SSO is wired in) ----
-  isAuthenticated: boolean;
-  authReady: boolean;
-  hydrateAuth: () => void;
-  login: () => void;
-  logout: () => void;
 
   // ---- feedback ----
   toast: { id: number; msg: string } | null;
@@ -129,8 +116,12 @@ interface StoreState {
   setMeetingStatus: (leadId: string, meetingId: string, status: "done" | "cancelled") => void;
   addNote: (leadId: string, txt: string, method: string) => void;
   setLeadPlan: (leadId: string, planId: string, mandateDate: string) => void;
+  // createLead and importLeads are the offline versions, kept for the tests.
+  // The app creates leads on the server (lib/api.ts), which assigns the ids
+  // and checks duplicates across everyone's leads, then calls addLeads.
   createLead: (input: NewLeadInput) => Lead | null;
   importLeads: (rows: ImportRow[], sourceLabel: string) => { count: number; toOwnAccount: number };
+  addLeads: (leads: Lead[]) => void;
   deleteLead: (leadId: string) => void;
   deleteAccount: (accountName: string) => void;
   snoozeFollowup: (leadId: string, days: number) => void;
@@ -164,50 +155,26 @@ interface StoreState {
   removeHoliday: (date: string) => void;
 }
 
-const seedData = generateSeed();
+const NOBODY: Rep = { id: "", name: "", role: "Rep", color: "" };
 
+// Starts empty. lib/sync.ts fills it from the server once the user has signed
+// in, and saves what the actions below change.
 export const useStore = create<StoreState>((set, get) => ({
-  reps: REPS,
-  currentUserId: "meera",
-  leads: seedData.leads,
-  companyHolidays: seedData.companyHolidays,
-  repLeaves: seedData.repLeaves,
+  reps: [],
+  currentUserId: "",
+  leads: [],
+  companyHolidays: [],
+  repLeaves: [],
   leaveRequests: [],
   changeRequests: [],
-  leaveSeq: 0,
-  crSeq: 0,
-  lrSeq: 0,
   paymentReminders: {},
-  targets: Object.fromEntries(REPS.filter((r) => r.role === "Rep").map((r) => [r.id, { callsPerDay: 8 }])),
-
-  // Placeholder only: there's no real session yet. The flag survives a page
-  // refresh via sessionStorage; Phase 2 replaces this with an Entra ID session.
-  isAuthenticated: false,
-  authReady: false,
-  hydrateAuth: () => {
-    let authed = false;
-    try {
-      authed = sessionStorage.getItem("modenx-auth") === "1";
-    } catch {}
-    set({ isAuthenticated: authed, authReady: true });
-  },
-  login: () => {
-    try {
-      sessionStorage.setItem("modenx-auth", "1");
-    } catch {}
-    set({ isAuthenticated: true, currentUserId: "meera" });
-  },
-  logout: () => {
-    try {
-      sessionStorage.removeItem("modenx-auth");
-    } catch {}
-    set({ isAuthenticated: false });
-  },
+  targets: {},
 
   toast: null,
   showToast: (msg) => set({ toast: { id: Date.now(), msg } }),
 
-  currentUser: () => repById(get().currentUserId) || get().reps[0],
+  // NOBODY only shows before the server has said who is signed in.
+  currentUser: () => repById(get().currentUserId) || NOBODY,
   isManager: () => get().currentUser().role === "Manager",
 
   // Reps only ever see leads a manager has assigned to them — there's no
@@ -223,8 +190,6 @@ export const useStore = create<StoreState>((set, get) => ({
     if (isManager()) return true;
     return leads.some((l) => l.account === accountName && l.assignee === currentUserId);
   },
-
-  setCurrentUser: (repId) => set({ currentUserId: repId }),
 
   // 1 account : 1 rep. Every contact at an account moves together.
   assignAccount: (accountName, repId) => {
@@ -507,6 +472,10 @@ export const useStore = create<StoreState>((set, get) => ({
     return { count: newLeads.length, toOwnAccount };
   },
 
+  addLeads: (leads) => {
+    if (leads.length) set((s) => ({ leads: [...s.leads, ...leads] }));
+  },
+
   // Leads are the single source of truth — deleting the last contact at an
   // account makes that account disappear from Accounts too, since it's derived.
   deleteLead: (leadId) => {
@@ -651,9 +620,8 @@ export const useStore = create<StoreState>((set, get) => ({
         }),
       }));
     } else {
-      const nextSeq = state.crSeq + 1;
       const cr: LeadChangeRequest = {
-        id: "CR" + String(nextSeq).padStart(3, "0"),
+        id: newId("CR"),
         scope: "lead",
         leadId,
         requestedBy: state.currentUserId,
@@ -666,7 +634,6 @@ export const useStore = create<StoreState>((set, get) => ({
         .join(", ");
       set((s) => ({
         changeRequests: [...s.changeRequests, cr],
-        crSeq: nextSeq,
         leads: s.leads.map((l) =>
           l.id === leadId
             ? {
@@ -711,9 +678,8 @@ export const useStore = create<StoreState>((set, get) => ({
       }));
     } else {
       set((s) => {
-        const nextSeq = s.crSeq + 1;
         const cr: AccountChangeRequest = {
-          id: "CR" + String(nextSeq).padStart(3, "0"),
+          id: newId("CR"),
           scope: "account",
           accountName,
           requestedBy: s.currentUserId,
@@ -723,7 +689,6 @@ export const useStore = create<StoreState>((set, get) => ({
         };
         return {
           changeRequests: [...s.changeRequests, cr],
-          crSeq: nextSeq,
           leads: s.leads.map((l) =>
             l.account === accountName
               ? {
@@ -829,16 +794,15 @@ export const useStore = create<StoreState>((set, get) => ({
       return false;
     }
     if (state.repLeaveOn(repId, date)) return false;
-    const nextSeq = state.lrSeq + 1;
     const req: LeaveRequest = {
-      id: "LR" + nextSeq,
+      id: newId("LR"),
       repId,
       date,
       reason,
       status: "pending",
       requestedAt: isoToday(),
     };
-    set((s) => ({ leaveRequests: [...s.leaveRequests, req], lrSeq: nextSeq }));
+    set((s) => ({ leaveRequests: [...s.leaveRequests, req] }));
     return true;
   },
 
@@ -853,9 +817,8 @@ export const useStore = create<StoreState>((set, get) => ({
         r.id === id ? { ...r, status: approve ? ("approved" as const) : ("rejected" as const), decidedBy, decidedAt } : r
       );
       if (!approve) return { leaveRequests };
-      const nextSeq = s.leaveSeq + 1;
-      const leave: RepLeave = { id: "LV" + nextSeq, repId: req.repId, date: req.date, reason: req.reason };
-      return { leaveRequests, leaveSeq: nextSeq, repLeaves: [...s.repLeaves, leave] };
+      const leave: RepLeave = { id: newId("LV"), repId: req.repId, date: req.date, reason: req.reason };
+      return { leaveRequests, repLeaves: [...s.repLeaves, leave] };
     });
   },
 

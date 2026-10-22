@@ -197,11 +197,13 @@ describe("M. Edit approvals", () => {
     expect(store().changeRequests).toHaveLength(0);
   });
 
-  it("M5 request IDs have no gaps", () => {
+  it("M5 request IDs don't collide when several people file at once", () => {
     as("priya");
     store().saveLeadEdit(a.id, phoneChange);
     store().saveAccountEdit("Studio Weft", { type: { from: "Brand", to: "Store" } });
-    expect(store().changeRequests.map((c) => c.id)).toEqual(["CR001", "CR002"]);
+    const ids = store().changeRequests.map((c) => c.id);
+    expect(ids.every((id) => /^CR-[0-9a-f]{16}$/.test(id))).toBe(true);
+    expect(new Set(ids).size).toBe(2);
   });
 
   it("M6 an approved account rename applies to every contact", () => {
@@ -333,24 +335,5 @@ describe("O. Leave and holidays", () => {
   it("O6 a second holiday on the same date is refused", () => {
     expect(store().addHoliday("2026-11-01", "Test")).toBe(true);
     expect(store().addHoliday("2026-11-01", "Test again")).toBe(false);
-  });
-});
-
-describe("Q. Sign-in placeholder", () => {
-  beforeEach(() => resetStore([]));
-
-  it("Q1 signing in survives a refresh", () => {
-    store().login();
-    expect(store()).toMatchObject({ isAuthenticated: true, currentUserId: "meera" });
-    useStore.setState({ isAuthenticated: false });
-    store().hydrateAuth();
-    expect(store().isAuthenticated).toBe(true);
-  });
-
-  it("Q2 logging out survives a refresh", () => {
-    store().login();
-    store().logout();
-    store().hydrateAuth();
-    expect(store().isAuthenticated).toBe(false);
   });
 });

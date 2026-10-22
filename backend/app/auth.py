@@ -132,7 +132,8 @@ async def callback(request: Request, db: Session = Depends(get_db)):
 @router.get("/auth/logout")
 def logout(request: Request):
     request.session.clear()
-    return HTMLResponse("<p style='font:15px system-ui;margin:3rem'>Signed out. <a href='/auth/login'>Sign in again</a></p>")
+    # The front end's sign-in page; it links back to /auth/login.
+    return RedirectResponse("/login", status_code=303)
 
 
 # ---- local development only ----

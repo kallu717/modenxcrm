@@ -18,7 +18,13 @@ permission rules; CI; deploy scaffolding; docs. Backend has 29 tests, run
 against a real Postgres. Previously also checked end to end in a browser with
 a dev login, against an earlier single-page front end.
 
-**Phase 2: connect the real front end to the API (our work, no devops needed)**
+**Phase 2: connect the real front end to the API (done on branch `phase-2/wire-api`)**
+Status: steps 1–6 done; step 7 partly (API-contract and sync tests added: 124
+front-end tests, 39 back-end tests; a scripted two-user workflow check passed
+against a local server; no automated browser test yet). Not verified: Entra
+sign-in (no credentials), and a click-through in a browser by a person.
+Decision still open: whether Account becomes its own table (see D6).
+
 1. `lib/api.ts`: fetch wrapper (cookie, `X-Requested-With: pipeline`, 401 sends the browser to `/auth/login`).
 2. Boot: load `/api/bootstrap` into the store (`me`, `users`, `leads`, `records`). Reps come from the users table, not `lib/constants.ts`.
 3. Remove `login()`, `hydrateAuth` sessionStorage, "Switch user", and the `/login` button. `AuthGate` asks the server who you are.
@@ -44,6 +50,7 @@ Later: scheduled push, or move Lead Desk's data into this database.
 | D3 | Schema migrations | Add Alembic before the first schema change. Lean: yes, in Phase 3. | Dev |
 | D4 | Rep onboarding | Users are created at first sign-in. Alternative: devops or a manager pre-loads reps from the Entra group. Lean: keep first sign-in for the pilot. | Both |
 | D5 | Live updates | The page saves within about 2 seconds and re-reads every 30 seconds when idle. Real-time push is more work. Lean: not needed for the pilot. | Product |
+| D6 | Account as its own table | Today an account is the name shared by its contacts; the server now enforces one owner per account and no renaming onto another account's name. A table adds a place for account-level fields (owner, notes, billing) and a stable id. Lean: not for the pilot; add it with the first migration if account-level fields are needed. | Product |
 
 ## Known gaps (not blockers for the plan, but real)
 

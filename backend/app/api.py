@@ -2,6 +2,7 @@
 what a rep may see or change."""
 
 import hmac
+from contextlib import contextmanager
 import json
 import re
 from datetime import datetime
@@ -9,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -126,14 +127,42 @@ class LeadPut(BaseModel):
 
 @router.put("/leads/{lead_id}")
 def put_lead(lead_id: str, body: LeadPut, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    renamed: dict[str, str] = {}
+    with duplicate_email_is_409(db):
+        row = update_lead(db, user, lead_id, body.version, body.lead, renamed)
+        check_accounts(db, renamed, {row.account})
+        db.commit()
+    return lead_out(row)
+
+
+@contextmanager
+def duplicate_email_is_409(db: Session):
+    """The unique email index fires on flush or commit; either way it's a 409."""
+    try:
+        yield
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, {"code": "duplicate_email"})
+
+
+def lock_accounts(db: Session, names) -> None:
+    """Serialize writers per account (case-insensitive) until this transaction
+    ends, so two people can't both claim the same account at the same moment."""
+    for name in sorted({n.lower() for n in names if n}):
+        db.execute(select(func.pg_advisory_xact_lock(func.hashtext(name))))
+
+
+def update_lead(db: Session, user: User, lead_id: str, version: int, lead: dict, renamed: dict[str, str]) -> Lead:
+    """Validate and apply one lead edit without committing. Records the old
+    account name in `renamed` when the account changes, for check_accounts."""
     row = db.execute(select(Lead).where(Lead.id == lead_id).with_for_update()).scalar_one_or_none()
     # 404 (not 403) for a rep touching someone else's lead: don't confirm it exists.
     if row is None or (not is_manager(user) and row.assignee_id != user.id):
-        raise HTTPException(404, "lead not found")
-    if row.version != body.version:
+        raise HTTPException(404, {"code": "not_found", "id": lead_id})
+    if row.version != version:
         raise HTTPException(409, {"code": "version_conflict", **lead_out(row)})
 
-    new, old = dict(body.lead), row.data
+    new, old = dict(lead), row.data
     if len(json.dumps(new)) > MAX_LEAD_BYTES:
         raise HTTPException(413, "lead too large")
     if has_markup(new):
@@ -156,31 +185,63 @@ def put_lead(lead_id: str, body: LeadPut, db: Session = Depends(get_db), user: U
     else:
         assignee_id = None
 
+    account = (new.get("account") or "").strip()
+    if not account:
+        raise HTTPException(422, "account name can't be empty")
+    if account.lower() != row.account.lower():
+        renamed[lead_id] = row.account
+    new["account"] = account
     email = (new.get("email") or "").strip()
     apply_score(new)
     row.data = new
-    row.account = new.get("account", "")
+    row.account = account
     row.email_lc = email.lower() or None
     row.assignee_id = assignee_id
     row.stage = new["stage"]
     row.version += 1
     row.updated_by = user.id
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(409, {"code": "duplicate_email"})
-    return lead_out(row)
+    db.flush()
+    return row
+
+
+def check_accounts(db: Session, renamed: dict[str, str], accounts: set[str]) -> None:
+    """Account rules the database can't express on its own, checked after a
+    batch of edits is flushed and before it commits:
+    - renaming onto a name another account already uses is refused, since it
+      would merge two accounts (case-insensitive; a whole account renamed in
+      one batch is fine);
+    - one account, one owner: the contacts at an account never have two
+      different reps (unassigned contacts don't count)."""
+    lock_accounts(db, accounts)
+    for lead_id in renamed:
+        new_name = db.get(Lead, lead_id).account
+        clash = db.scalar(
+            select(Lead.id).where(func.lower(Lead.account) == new_name.lower(), Lead.id.not_in(list(renamed))).limit(1)
+        )
+        if clash is not None:
+            raise HTTPException(409, {"code": "account_name_taken", "account": new_name})
+    for name in {a.lower() for a in accounts}:
+        owners = db.scalar(
+            select(func.count(func.distinct(Lead.assignee_id))).where(
+                func.lower(Lead.account) == name, Lead.assignee_id.is_not(None)
+            )
+        )
+        if owners > 1:
+            raise HTTPException(409, {"code": "account_has_two_owners", "account": name})
+
+
+def remove_lead(db: Session, user: User, lead_id: str) -> None:
+    if not is_manager(user):
+        raise HTTPException(403, "managers only")
+    row = db.get(Lead, lead_id)
+    if row is not None:
+        db.delete(row)
+        db.flush()
 
 
 @router.delete("/leads/{lead_id}", status_code=204)
 def delete_lead(lead_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    if not is_manager(user):
-        raise HTTPException(403, "managers only")
-    row = db.get(Lead, lead_id)
-    if row is None:
-        return
-    db.delete(row)
+    remove_lead(db, user, lead_id)
     db.commit()
 
 
@@ -213,14 +274,21 @@ def process_rows(db: Session, user: User, rows: list[LeadIn], source: str, *, dr
     issues, valid = [], []
     emails = {r.email.lower() for r in rows if r.email}
     existing_emails = set(db.scalars(select(Lead.email_lc).where(Lead.email_lc.in_(emails)))) if emails else set()
-    accounts = {r.account for r in rows if r.account}
+    # Accounts are matched case-insensitively: a contact joining an existing
+    # account takes that account's exact name and type, so one account never
+    # splits in two. Keys below are lower-cased names.
+    accounts = {r.account.lower() for r in rows if r.account}
     owners: dict[str, int] = {}
-    known_accounts: set[str] = set()
+    canonical: dict[str, tuple[str, str]] = {}
+    if accounts and not dry_run:
+        lock_accounts(db, accounts)
     if accounts:
-        for acct, owner in db.execute(select(Lead.account, Lead.assignee_id).where(Lead.account.in_(accounts))):
-            known_accounts.add(acct)
+        q = select(Lead.account, Lead.assignee_id, Lead.data["type"].astext).where(func.lower(Lead.account).in_(accounts))
+        for acct, owner, acct_type in db.execute(q):
+            canonical.setdefault(acct.lower(), (acct, acct_type))
             if owner is not None:
-                owners.setdefault(acct, owner)
+                owners.setdefault(acct.lower(), owner)
+    known_accounts = set(canonical)
     seen_emails: set[str] = set()
     duplicates = 0
 
@@ -249,7 +317,7 @@ def process_rows(db: Session, user: User, rows: list[LeadIn], source: str, *, dr
             seen_emails.add(email_lc)
         valid.append(r)
 
-    new_accounts = len({r.account for r in valid} - known_accounts)
+    new_accounts = len({r.account.lower() for r in valid} - known_accounts)
     result = {
         "ready": len(valid),
         "newAccounts": new_accounts,
@@ -264,10 +332,13 @@ def process_rows(db: Session, user: User, rows: list[LeadIn], source: str, *, dr
     today = today_iso()
     names = {u.id: u.name for u in db.scalars(select(User))}
     for r in valid:
-        existing_owner = owners.get(r.account)
+        key = r.account.lower()
+        # Rows earlier in this same sheet count as existing accounts too.
+        account, acct_type = canonical.setdefault(key, (r.account, r.type))
+        existing_owner = owners.get(key)
         assignee = existing_owner or (user.id if not is_manager(user) else None)
         if assignee is not None:
-            owners.setdefault(r.account, assignee)
+            owners.setdefault(key, assignee)
         bits = [source]
         if existing_owner and existing_owner != user.id:
             bits.append(f"Account already owned by {names.get(existing_owner, 'another rep')} — kept with them.")
@@ -276,7 +347,7 @@ def process_rows(db: Session, user: User, rows: list[LeadIn], source: str, *, dr
         n = db.execute(select(lead_id_seq.next_value())).scalar_one()
         lead = {
             "id": f"L{n:03d}",
-            "name": r.name, "title": r.title, "account": r.account, "type": r.type,
+            "name": r.name, "title": r.title, "account": account, "type": acct_type,
             "email": r.email, "phone": r.phone, "city": r.city or "—",
             "emailQuality": "none" if not r.email else ("verified" if r.verified.lower().startswith("y") else "catchall"),
             "multiSource": False,
@@ -289,15 +360,14 @@ def process_rows(db: Session, user: User, rows: list[LeadIn], source: str, *, dr
             "activity": [{"who": "System", "txt": " ".join(bits), "t": "just now", "date": today, "method": None}],
         }
         apply_score(lead)
-        row = Lead(id=lead["id"], account=r.account, email_lc=email_lc_or_none(r.email),
+        row = Lead(id=lead["id"], account=account, email_lc=email_lc_or_none(r.email),
                    assignee_id=assignee, stage="new", version=1, data=lead, updated_by=user.id)
         db.add(row)
         result["created"].append(row)
-    try:
+    with duplicate_email_is_409(db):
+        db.flush()
+        check_accounts(db, {}, {account for account, _ in canonical.values()})
         db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(409, {"code": "duplicate_email"})
     result["created"] = [lead_out(r) for r in result["created"]]
     return result
 
@@ -448,11 +518,17 @@ class RecordPut(BaseModel):
 
 @router.put("/records/{kind}/{rid}")
 def put_record(kind: str, rid: str, body: RecordPut, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    row = upsert_record(db, user, kind, rid, body.data)
+    db.commit()
+    return {"id": rid, "data": row.data}
+
+
+def upsert_record(db: Session, user: User, kind: str, rid: str, data: dict) -> Record:
     if kind not in KINDS:
         raise HTTPException(404, "unknown kind")
     if not rid or len(rid) > 64:
         raise HTTPException(422, "bad id")
-    data = dict(body.data)
+    data = dict(data)
     if len(json.dumps(data)) > MAX_RECORD_BYTES:
         raise HTTPException(413, "record too large")
     if has_markup(data):
@@ -464,12 +540,11 @@ def put_record(kind: str, rid: str, body: RecordPut, db: Session = Depends(get_d
         db.add(existing)
     else:
         existing.data, existing.owner_id, existing.updated_by = data, owner, user.id
-    db.commit()
-    return {"id": rid, "data": existing.data}
+    db.flush()
+    return existing
 
 
-@router.delete("/records/{kind}/{rid}", status_code=204)
-def delete_record(kind: str, rid: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def remove_record(db: Session, user: User, kind: str, rid: str) -> None:
     if kind not in KINDS:
         raise HTTPException(404, "unknown kind")
     if not is_manager(user):
@@ -477,4 +552,56 @@ def delete_record(kind: str, rid: str, db: Session = Depends(get_db), user: User
     row = db.get(Record, (kind, rid))
     if row is not None:
         db.delete(row)
+        db.flush()
+
+
+@router.delete("/records/{kind}/{rid}", status_code=204)
+def delete_record(kind: str, rid: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    remove_record(db, user, kind, rid)
+    db.commit()
+
+
+# ------------------------------------------------------------------- sync
+
+class RecordRef(BaseModel):
+    kind: str
+    id: str
+
+
+class RecordIn(RecordRef):
+    data: dict
+
+
+class SyncIn(BaseModel):
+    leads: list[LeadPut] = Field(default=[], max_length=2000)
+    deleteLeads: list[str] = Field(default=[], max_length=2000)
+    records: list[RecordIn] = Field(default=[], max_length=2000)
+    deleteRecords: list[RecordRef] = Field(default=[], max_length=2000)
+
+
+@router.post("/sync")
+def sync(body: SyncIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Everything one action in the app changed, saved all-or-nothing.
+    Approving an account rename, for example, touches every contact at the
+    account plus the request itself; either all of it lands or none does.
+    Each item goes through the same checks as the single-item endpoints."""
+    renamed: dict[str, str] = {}
+    accounts: set[str] = set()
+    with duplicate_email_is_409(db):
+        leads = []
+        for item in body.leads:
+            lead_id = str(item.lead.get("id", ""))
+            row = update_lead(db, user, lead_id, item.version, item.lead, renamed)
+            accounts.add(row.account)
+            leads.append(row)
+        for lead_id in body.deleteLeads:
+            remove_lead(db, user, lead_id)
+        records = [upsert_record(db, user, r.kind, r.id, r.data) for r in body.records]
+        for r in body.deleteRecords:
+            remove_record(db, user, r.kind, r.id)
+        check_accounts(db, renamed, accounts)
         db.commit()
+    return {
+        "leads": [lead_out(r) for r in leads],
+        "records": [{"kind": r.kind, "id": r.id, "data": r.data} for r in records],
+    }

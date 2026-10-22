@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { CITIES, repById } from "@/lib/constants";
+import { api, describeError } from "@/lib/api";
+import { adoptLeads } from "@/lib/sync";
 import type { AccountType } from "@/lib/types";
 
 const VALID_TYPES: AccountType[] = ["Brand", "Mall", "Store"];
@@ -11,7 +13,6 @@ const inputStyle = { borderColor: "var(--grid)", background: "var(--surface)", c
 
 export default function NewLeadModal({ onClose }: { onClose: () => void }) {
   const leads = useStore((s) => s.leads);
-  const createLead = useStore((s) => s.createLead);
   const showToast = useStore((s) => s.showToast);
 
   const [form, setForm] = useState({
@@ -26,6 +27,7 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
     verified: false,
   });
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const existingAccount = useMemo(
     () => leads.find((l) => l.account.toLowerCase() === form.account.trim().toLowerCase()),
@@ -36,7 +38,8 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
   const set = <K extends keyof typeof form>(key: K, v: (typeof form)[K]) =>
     setForm((s) => ({ ...s, [key]: v }));
 
-  const submit = () => {
+  const submit = async () => {
+    if (busy) return;
     const required = ["name", "title", "account", "type", "email", "city"] as const;
     const missing = required.filter((k) => !form[k]);
     if (missing.length) {
@@ -47,19 +50,27 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
       setError("That email doesn't look right.");
       return;
     }
-    const lead = createLead({
-      name: form.name,
-      title: form.title,
-      account: form.account,
-      type: existingAccount ? existingAccount.type : form.type,
-      email: form.email,
-      phone: form.phone,
-      city: form.city,
-      notes: form.notes,
-      verified: form.verified,
-    });
-    if (!lead) {
-      setError("A lead with that email already exists.");
+    // The server picks the id, joins an existing account and its owner, and
+    // checks the email against everyone's leads, including ones you can't see.
+    setBusy(true);
+    let lead;
+    try {
+      const created = await api.createLead({
+        name: form.name,
+        title: form.title,
+        account: form.account,
+        type: existingAccount ? existingAccount.type : form.type,
+        email: form.email,
+        phone: form.phone,
+        city: form.city,
+        notes: form.notes,
+        verified: form.verified ? "Yes" : "No",
+      });
+      adoptLeads([created]);
+      lead = created.lead;
+    } catch (e) {
+      setError(describeError(e));
+      setBusy(false);
       return;
     }
     const owner = repById(lead.assignee);
@@ -231,7 +242,8 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
           </button>
           <button
             type="button"
-            className="px-3 py-1.5 rounded-md text-[13px] text-white"
+            disabled={busy}
+            className="px-3 py-1.5 rounded-md text-[13px] text-white disabled:opacity-60"
             style={{ background: "var(--accent)" }}
             onClick={submit}
           >

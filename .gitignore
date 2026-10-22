@@ -47,3 +47,6 @@ next-env.d.ts
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# local tooling (downloaded Postgres etc.), never committed
+/tools/
