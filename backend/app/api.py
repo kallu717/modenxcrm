@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from .auth import csrf_guard, current_user
 from .config import get_settings
 from .db import get_db
-from .models import Lead, Record, User, lead_id_seq
+from .models import RECORD_KINDS, STAGES as LEAD_STAGES, Lead, Record, User, lead_id_seq
 from .scoring import apply_score
 
 settings = get_settings()
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/api", dependencies=[Depends(csrf_guard)])
 
 TZ = ZoneInfo(settings.app_timezone)
 VALID_TYPES = ("Brand", "Mall", "Store")
-STAGES = {"new", "contacted", "qualified", "unqualified", "proposal", "won", "lost"}
+STAGES = set(LEAD_STAGES)
 MAX_LEAD_BYTES = 200_000
 MAX_RECORD_BYTES = 20_000
 EMAIL_RE = re.compile(r"^\S+@\S+\.\S+$")
@@ -439,7 +439,7 @@ def create_lead(body: LeadIn, db: Session = Depends(get_db), user: User = Depend
 
 # ---------------------------------------------------------------- records
 
-KINDS = {"change_request", "leave_request", "leave_day", "holiday", "payment_reminder", "target"}
+KINDS = set(RECORD_KINDS)
 SHARED_READ = {"holiday", "target"}
 
 

@@ -8,7 +8,14 @@ class Base(DeclarativeBase):
     pass
 
 
-engine = create_engine(get_settings().database_url, pool_pre_ping=True)
+settings = get_settings()
+# Pin each connection's time zone to the team's, so anything Postgres itself
+# renders as a date (now(), ::date) matches the dates the app stores.
+engine = create_engine(
+    settings.database_url,
+    pool_pre_ping=True,
+    connect_args={"options": f"-c timezone={settings.app_timezone}"},
+)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 

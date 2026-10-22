@@ -1,10 +1,21 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, Sequence, String, text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, Sequence, String, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
+
+# The allowed values, enforced by the database itself (CHECK constraints), so
+# a bug or a hand-written SQL statement can't store a stage or role the app
+# doesn't know. Keep in step with lib/types.ts; api.py imports these.
+ROLES = ("Rep", "Manager")
+STAGES = ("new", "contacted", "qualified", "unqualified", "proposal", "won", "lost")
+RECORD_KINDS = ("change_request", "leave_request", "leave_day", "holiday", "payment_reminder", "target")
+
+
+def _one_of(column: str, values: tuple[str, ...]) -> str:
+    return f"{column} IN (" + ", ".join(f"'{v}'" for v in values) + ")"
 
 
 def _now() -> datetime:
@@ -22,6 +33,8 @@ class User(Base):
     color: Mapped[str] = mapped_column(String(9))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (CheckConstraint(_one_of("role", ROLES), name="ck_users_role"),)
 
 
 lead_id_seq = Sequence("lead_id_seq", metadata=Base.metadata)
@@ -53,6 +66,10 @@ class Lead(Base):
             unique=True,
             postgresql_where=text("email_lc IS NOT NULL AND email_lc <> ''"),
         ),
+        # Accounts are matched case-insensitively (import, one-owner check).
+        Index("ix_leads_account_lc", func.lower(account)),
+        CheckConstraint(_one_of("stage", STAGES), name="ck_leads_stage"),
+        CheckConstraint("version >= 1", name="ck_leads_version"),
     )
 
 
@@ -68,3 +85,5 @@ class Record(Base):
     data: Mapped[dict] = mapped_column(JSONB)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
     updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+
+    __table_args__ = (CheckConstraint(_one_of("kind", RECORD_KINDS), name="ck_records_kind"),)

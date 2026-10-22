@@ -34,7 +34,7 @@ Decision still open: whether Account becomes its own table (see D6).
 7. Tests: keep the 116; add API-contract tests; one browser end-to-end script (two users, assignment, approval).
 
 **Phase 3: pilot hardening (needs devops items)**
-Test Entra sign-in with real credentials; run the containers; migrations (Alembic); logging; rate limiting; CSP at the proxy; backup restore test; a short security review.
+Test Entra sign-in with real credentials; run the containers; logging; rate limiting; CSP at the proxy; backup restore test; a short security review.
 
 **Phase 4: Lead Desk to Pipeline**
 Already available: Lead Desk "Export for Pipeline" file, loaded by Import or by
@@ -47,7 +47,7 @@ Later: scheduled push, or move Lead Desk's data into this database.
 |---|---|---|---|
 | D1 | Where does it run? | VM with Docker, Kubernetes, or a platform you already operate. We are neutral; the images are plain. | DevOps |
 | D2 | Front end as a Node server or static files? | Every page is client-rendered, so a static export (`output: "export"`) served by the proxy is possible. That removes the Node runtime and the whole class of Next-server vulnerabilities. Lean: static export, if nothing needs a Next server. We confirm it builds in Phase 2. | Both |
-| D3 | Schema migrations | Add Alembic before the first schema change. Lean: yes, in Phase 3. | Dev |
+| D3 | Schema migrations | **Done:** Alembic scripts in `backend/app/migrations`, run at API start or as `python -m app.migrate`. | Dev |
 | D4 | Rep onboarding | Users are created at first sign-in. Alternative: devops or a manager pre-loads reps from the Entra group. Lean: keep first sign-in for the pilot. | Both |
 | D5 | Live updates | The page saves within about 2 seconds and re-reads every 30 seconds when idle. Real-time push is more work. Lean: not needed for the pilot. | Product |
 | D6 | Account as its own table | Today an account is the name shared by its contacts; the server now enforces one owner per account and no renaming onto another account's name. A table adds a place for account-level fields (owner, notes, billing) and a stable id. Lean: not for the pilot; add it with the first migration if account-level fields are needed. | Product |

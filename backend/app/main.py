@@ -9,7 +9,7 @@ from . import models  # noqa: F401  (registers tables)
 from .api import ingest_router, router as api_router
 from .auth import router as auth_router
 from .config import get_settings
-from .db import Base, engine
+from .migrate import upgrade as upgrade_database
 
 settings = get_settings()
 settings.check_production_safety()
@@ -17,7 +17,10 @@ settings.check_production_safety()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(engine)
+    # Create or upgrade the tables (app/migrations). Off when devops runs
+    # `python -m app.migrate` as its own deploy step instead.
+    if settings.auto_migrate:
+        upgrade_database()
     yield
 
 

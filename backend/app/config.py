@@ -23,6 +23,8 @@ class Settings(BaseSettings):
 
     # Optional: serve a static front-end build from this process (see main.py).
     frontend_dir: str = ""
+    # Bring the database schema up to date when the API starts (see migrate.py).
+    auto_migrate: bool = True
     # Refuse "<" and ">" in lead/record text. Off by default: the React front end
     # escapes text itself. Turn on only for a client that builds HTML from strings.
     reject_markup: bool = False
