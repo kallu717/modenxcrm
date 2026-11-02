@@ -1,11 +1,10 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.auth import role_for
 from app.config import Settings
 from app.main import app
 
-from conftest import HEADERS, ROW, import_rows
+from conftest import HEADERS, ROW, import_rows, signed_in
 
 
 # ---------------------------------------------------------------- access
@@ -233,19 +232,93 @@ def test_leave_request_is_private_to_the_rep_and_manager(priya, arjun, meera):
 
 # ---------------------------------------------------------------- config
 
-def test_role_for_uses_config(monkeypatch):
-    from app import auth
-    monkeypatch.setattr(auth.settings, "manager_emails", "boss@co.com, Other@co.com")
-    monkeypatch.setattr(auth.settings, "manager_group_id", "grp-1")
-    assert role_for("Boss@co.com", None) == "Manager"
-    assert role_for("rep@co.com", ["grp-1"]) == "Manager"
-    assert role_for("rep@co.com", ["grp-2"]) == "Rep"
-
-
 def test_production_refuses_unsafe_config():
     with pytest.raises(RuntimeError) as e:
         Settings(env="production", dev_login=True, session_secret="change-me").check_production_safety()
     msg = str(e.value)
-    assert "DEV_LOGIN" in msg and "SESSION_SECRET" in msg and "AZURE" in msg
+    assert "DEV_LOGIN" in msg and "SESSION_SECRET" in msg and "AZURE" in msg and "ADMIN_EMAILS" in msg
     Settings(env="production", dev_login=False, session_secret="x" * 40, cookie_secure=True, azure_tenant_id="t",
-             azure_client_id="c", azure_client_secret="s").check_production_safety()
+             azure_client_id="c", azure_client_secret="s", admin_emails="owner@co.com").check_production_safety()
+
+
+# ----------------------------------------------------------------- roles
+
+def _id(client) -> str:
+    return client.get("/api/me").json()["id"]
+
+
+def _set_role(admin, uid, role):
+    return admin.put(f"/api/admin/users/{uid}", json={"role": role})
+
+
+def test_someone_without_a_role_sees_nothing(newhire, priya):
+    me = newhire.get("/api/me")
+    assert me.status_code == 200 and me.json()["role"] == "Pending"
+    r = newhire.get("/api/bootstrap")
+    assert r.status_code == 403 and r.json()["detail"]["code"] == "pending"
+    assert newhire.get("/api/leads").status_code == 403
+    assert import_rows(newhire, [ROW]).status_code == 403
+    # and they aren't on anyone's team list (so can't be assigned leads)
+    assert "newhire@dev.local" not in [u["email"] for u in priya.get("/api/bootstrap").json()["users"]]
+
+
+def test_admin_can_do_what_a_manager_does(asha, priya):
+    import_rows(priya, [ROW])
+    assert len(asha.get("/api/leads").json()) == 1          # sees every rep's leads
+    lead = asha.get("/api/leads").json()[0]["lead"]
+    assert asha.delete(f"/api/leads/{lead['id']}").status_code == 204
+
+
+def test_only_admins_reach_settings(asha, meera, priya):
+    assert asha.get("/api/admin/users").status_code == 200
+    assert meera.get("/api/admin/users").status_code == 403
+    assert priya.get("/api/admin/users").status_code == 403
+    assert _set_role(meera, _id(priya), "Manager").status_code == 403
+    assert _set_role(priya, _id(priya), "Admin").status_code == 403
+
+
+def test_admin_gives_a_newcomer_a_role_and_it_applies_at_once(asha, newhire):
+    uid = _id(newhire)
+    listed = {u["email"]: u for u in asha.get("/api/admin/users").json()}
+    assert listed["newhire@dev.local"]["role"] == "Pending"
+    r = _set_role(asha, uid, "Rep")
+    assert r.status_code == 200 and r.json()["role"] == "Rep"
+    assert newhire.get("/api/bootstrap").status_code == 200   # same session, no sign-out needed
+    assert _set_role(asha, uid, "Pending").status_code == 200   # access taken away
+    assert newhire.get("/api/bootstrap").status_code == 403
+
+
+def test_the_role_an_admin_gave_survives_signing_in_again(asha, newhire):
+    _set_role(asha, _id(newhire), "Manager")
+    again = signed_in("newhire@dev.local")
+    assert again.get("/api/me").json()["role"] == "Manager"
+
+
+def test_admin_cannot_change_their_own_role(asha):
+    r = _set_role(asha, _id(asha), "Rep")
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "own_role"
+    me = [u for u in asha.get("/api/admin/users").json() if u["email"] == "asha@dev.local"][0]
+    assert me["locked"] == "self"
+
+
+def test_admin_emails_are_always_admin_and_locked(asha, monkeypatch):
+    from app import auth
+    monkeypatch.setattr(auth.settings, "admin_emails", "Meera@dev.local")
+    meera = signed_in("meera@dev.local")       # was Manager; ADMIN_EMAILS wins
+    assert meera.get("/api/me").json()["role"] == "Admin"
+    r = _set_role(asha, _id(meera), "Rep")
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "set_by_server"
+
+
+def test_a_rep_with_leads_keeps_the_rep_role_until_they_are_reassigned(asha, priya):
+    import_rows(priya, [ROW])
+    r = _set_role(asha, _id(priya), "Manager")
+    assert r.status_code == 409 and r.json()["detail"] == {"code": "has_leads", "count": 1}
+    lead = asha.get("/api/leads").json()[0]
+    asha.put(f"/api/leads/{lead['lead']['id']}", json={"version": lead["version"], "lead": dict(lead["lead"], assignee=None)})
+    assert _set_role(asha, _id(priya), "Manager").status_code == 200
+
+
+def test_unknown_role_or_user_is_refused(asha):
+    assert _set_role(asha, 99999, "Rep").status_code == 404
+    assert _set_role(asha, _id(asha), "Owner").status_code == 422

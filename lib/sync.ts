@@ -137,12 +137,25 @@ function toSignIn() {
   window.location.assign("/login");
 }
 
+// An admin took this person's access away mid-session: start over, and
+// AuthGate shows the waiting-for-access screen.
+function isPending(e: unknown): boolean {
+  return e instanceof ApiError && e.status === 403 && (e.detail as { code?: string } | null)?.code === "pending";
+}
+
 async function reload() {
   try {
     load(await api.bootstrap());
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) toSignIn();
+    else if (isPending(e)) window.location.reload();
   }
+}
+
+// Re-read the server now (e.g. after an admin changes someone's role), unless
+// there are unsaved edits; those trigger their own refresh once saved.
+export function refresh() {
+  void refreshIfIdle();
 }
 
 function schedule() {
@@ -187,6 +200,7 @@ async function save() {
     });
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) return toSignIn();
+    if (isPending(e)) return window.location.reload();
     useStore.getState().showToast(describeError(e));
     await reload();
   } finally {
@@ -217,13 +231,15 @@ export function adoptLeads(created: Versioned[]) {
   });
 }
 
-// Called once by AuthGate. Resolves to false when nobody is signed in.
-export async function startSession(): Promise<boolean> {
-  if (started) return true;
+// Called once by AuthGate. "out" when nobody is signed in, "pending" when
+// they are but an admin hasn't given them a role yet.
+export async function startSession(): Promise<"in" | "out" | "pending"> {
+  if (started) return "in";
   try {
     load(await api.bootstrap());
   } catch (e) {
-    if (e instanceof ApiError && e.status === 401) return false;
+    if (e instanceof ApiError && e.status === 401) return "out";
+    if (isPending(e)) return "pending";
     throw e;
   }
   started = true;
@@ -234,7 +250,7 @@ export async function startSession(): Promise<boolean> {
   window.addEventListener("beforeunload", (ev) => {
     if (saving || timer) ev.preventDefault(); // "changes may not be saved"
   });
-  return true;
+  return "in";
 }
 
 export async function signOut() {

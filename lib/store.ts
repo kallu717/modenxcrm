@@ -98,6 +98,7 @@ interface StoreState {
   // ---- derived / role helpers ----
   currentUser: () => Rep;
   isManager: () => boolean;
+  isAdmin: () => boolean;
   visibleLeads: () => Lead[];
   accountManageable: (accountName: string) => boolean;
 
@@ -175,7 +176,8 @@ export const useStore = create<StoreState>((set, get) => ({
 
   // NOBODY only shows before the server has said who is signed in.
   currentUser: () => repById(get().currentUserId) || NOBODY,
-  isManager: () => get().currentUser().role === "Manager",
+  isManager: () => ["Manager", "Admin"].includes(get().currentUser().role),
+  isAdmin: () => get().currentUser().role === "Admin",
 
   // Reps only ever see leads a manager has assigned to them — there's no
   // self-claim pool to browse. Managers see everyone's, assigned or not.

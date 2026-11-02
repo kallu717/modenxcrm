@@ -13,6 +13,15 @@ export interface ServerUser {
   email: string;
 }
 
+export interface AdminUser extends ServerUser {
+  createdAt: string | null;
+  lastLogin: string | null;
+  leadCount: number;
+  // Why the role can't be changed from Settings: set in the server's
+  // ADMIN_EMAILS, or it's your own account.
+  locked: "server" | "self" | null;
+}
+
 export interface Versioned {
   version: number;
   lead: Lead;
@@ -85,7 +94,10 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 }
 
 export const api = {
+  me: () => call<ServerUser>("GET", "/api/me"),
   bootstrap: () => call<Bootstrap>("GET", "/api/bootstrap"),
+  adminUsers: () => call<AdminUser[]>("GET", "/api/admin/users"),
+  setRole: (userId: string, role: Role) => call<AdminUser>("PUT", `/api/admin/users/${userId}`, { role }),
   sync: (body: SyncBody) => call<{ leads: Versioned[]; records: RecordItem[] }>("POST", "/api/sync", body),
   createLead: (row: ImportRow) => call<Versioned>("POST", "/api/leads", row),
   importLeads: (rows: ImportRow[], filename: string, dryRun: boolean) =>
@@ -95,7 +107,7 @@ export const api = {
 // Plain-language reasons for a refused save, shown in a toast.
 export function describeError(e: unknown): string {
   if (!(e instanceof ApiError)) return "Couldn't reach the server. Check your connection.";
-  const d = e.detail as { code?: string; account?: string; issues?: string[]; fields?: string[] } | string | null;
+  const d = e.detail as { code?: string; account?: string; issues?: string[]; fields?: string[]; count?: number } | string | null;
   const code = typeof d === "object" && d ? d.code : undefined;
   switch (code) {
     case "version_conflict":
@@ -115,6 +127,16 @@ export function describeError(e: unknown): string {
     }
     case "not_found":
       return "That lead is no longer assigned to you.";
+    case "own_role":
+      return "You can't change your own role. Ask another admin.";
+    case "set_by_server":
+      return "This person is an admin in the server settings (ADMIN_EMAILS), so their role can't be changed here.";
+    case "has_leads": {
+      const n = typeof d === "object" && d?.count;
+      return `This rep still has ${n} lead${n === 1 ? "" : "s"}. Reassign them first, then change the role.`;
+    }
+    case "pending":
+      return "Your account is waiting for an admin to give you access.";
   }
   if (e.status === 403) return "You don't have permission to do that.";
   if (e.status === 401) return "Your session has ended. Please sign in again.";

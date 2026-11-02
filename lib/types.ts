@@ -1,4 +1,13 @@
-export type Role = "Rep" | "Manager";
+// "Pending" is signed in but not yet given a role by an Admin. Admins can do
+// everything a Manager can, plus assign roles. The server enforces all of it.
+export type Role = "Pending" | "Rep" | "Manager" | "Admin";
+
+export const ROLE_LABELS: Record<Role, string> = {
+  Pending: "No access",
+  Rep: "Sales Rep",
+  Manager: "Manager",
+  Admin: "Admin",
+};
 
 export interface Rep {
   id: string;

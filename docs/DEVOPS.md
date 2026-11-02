@@ -26,8 +26,8 @@ Everything the application itself needs is built or planned on our side (see
 
 | # | Item | Details | Status |
 |---|---|---|---|
-| 1 | **Entra ID app registration** | Single tenant. Web redirect URI `https://<host>/auth/callback`. Client secret (note its expiry). Optionally add the `groups` claim to the ID token. Give us tenant id, client id, and the secret through your secrets store. | open |
-| 2 | **Who is a manager** | Either a list of emails (`MANAGER_EMAILS`) or an Entra group object id (`MANAGER_GROUP_ID`). Everyone else who signs in is a Rep. | open |
+| 1 | **Entra ID app registration** | Single tenant. Web redirect URI `https://<host>/auth/callback`. Client secret (note its expiry). No `groups` claim needed: roles are assigned in the app. Give us tenant id, client id, and the secret through your secrets store. | open |
+| 2 | **Who is the admin** | The owner's work email in `ADMIN_EMAILS`. That person is always Admin and assigns everyone else's role (Sales Rep, Manager, Admin) on the app's Settings page. Anyone else who signs in sees "waiting for access" until then. | open |
 | 3 | **PostgreSQL** | 14+ (tested on 16). One empty database, one role that owns it. TLS on. Backups with a restore you have actually tested. The tables are created by migration scripts (see *Database* below); you don't create any by hand. | open |
 | 4 | **Where it runs** | Containers on what? (D1) Needs: 1+ replica of the API, 1 of the front end, outbound HTTPS to `login.microsoftonline.com`. | open |
 | 5 | **Hostname, TLS, proxy** | One public name, a certificate, the proxy rules in `deploy/nginx.conf` (or your equivalent). Set `COOKIE_SECURE=true` once on HTTPS. | open |
@@ -41,13 +41,13 @@ Everything the application itself needs is built or planned on our side (see
 
 | Variable | Needed | Notes |
 |---|---|---|
-| `ENV` | yes | `production` turns on safety checks. In production the API **refuses to start** if `DEV_LOGIN` is on, `SESSION_SECRET` is weak, `COOKIE_SECURE` is off, or Azure is not configured. |
+| `ENV` | yes | `production` turns on safety checks. In production the API **refuses to start** if `DEV_LOGIN` is on, `SESSION_SECRET` is weak, `COOKIE_SECURE` is off, Azure is not configured, or `ADMIN_EMAILS` is empty. |
 | `DATABASE_URL` | yes | `postgresql+psycopg://user:pass@host:5432/db` |
 | `SESSION_SECRET` | yes | 32+ random characters. Changing it signs everyone out. |
 | `BASE_URL` | yes | Public URL users type, e.g. `https://crm.company.internal`. |
 | `COOKIE_SECURE` | yes | `true` on HTTPS. |
 | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` | yes | From item 1. |
-| `MANAGER_EMAILS` / `MANAGER_GROUP_ID` | one of | From item 2. |
+| `ADMIN_EMAILS` | yes | From item 2. Comma-separated. In production the API refuses to start without it. |
 | `APP_TIMEZONE` | no | Default `Asia/Kolkata`; stamps "today" on new leads and is the time zone of every database connection. |
 | `AUTO_MIGRATE` | no | Default `true`: the API brings the database schema up to date when it starts. Set `false` if you run `python -m app.migrate` as a separate deploy step. |
 | `INGEST_API_KEY` | no | Enables the Lead Desk push endpoint. Empty = disabled. |

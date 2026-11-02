@@ -7,6 +7,7 @@ import { useStore } from "@/lib/store";
 import { followupBucket } from "@/lib/dates";
 import { duePayments } from "@/lib/revenue";
 import { signOut } from "@/lib/sync";
+import { ROLE_LABELS } from "@/lib/types";
 
 const NAV_ITEMS = [
   { href: "/pipeline", label: "Pipeline" },
@@ -16,9 +17,11 @@ const NAV_ITEMS = [
   { href: "/reports", label: "Reports", managerOnly: true },
   { href: "/revenue", label: "Revenue", managerOnly: true },
   { href: "/calendar", label: "Calendar", badge: "calendar" },
+  { href: "/settings", label: "Settings", adminOnly: true },
 ] as const;
 
 const MANAGER_ONLY_PATHS = ["/reports", "/revenue"];
+const ADMIN_ONLY_PATHS = ["/settings"];
 
 function initials(name: string): string {
   return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -33,7 +36,8 @@ export default function Masthead() {
   const paymentReminders = useStore((s) => s.paymentReminders);
   const currentUserId = useStore((s) => s.currentUserId);
   const currentUser = useStore((s) => s.currentUser());
-  const isManager = currentUser.role === "Manager";
+  const isManager = useStore((s) => s.isManager());
+  const isAdmin = useStore((s) => s.isAdmin());
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -62,8 +66,11 @@ export default function Masthead() {
   }, []);
 
   useEffect(() => {
-    if (!isManager && MANAGER_ONLY_PATHS.some((p) => pathname?.startsWith(p))) router.replace("/pipeline");
-  }, [isManager, pathname, router]);
+    const blocked =
+      (!isManager && MANAGER_ONLY_PATHS.some((p) => pathname?.startsWith(p))) ||
+      (!isAdmin && ADMIN_ONLY_PATHS.some((p) => pathname?.startsWith(p)));
+    if (blocked) router.replace("/pipeline");
+  }, [isManager, isAdmin, pathname, router]);
 
   return (
     <header className="sticky top-0 z-50 border-b" style={{ background: "var(--bg)", borderColor: "var(--grid)" }}>
@@ -81,7 +88,9 @@ export default function Masthead() {
         </div>
 
         <nav className="flex items-center gap-1 flex-1 flex-wrap" aria-label="View">
-          {NAV_ITEMS.filter((item) => !("managerOnly" in item) || isManager).map((item) => {
+          {NAV_ITEMS.filter(
+            (item) => (!("managerOnly" in item) || isManager) && (!("adminOnly" in item) || isAdmin)
+          ).map((item) => {
             const active = pathname?.startsWith(item.href);
             const count = "badge" in item ? badges[item.badge] : 0;
             return (
@@ -146,7 +155,7 @@ export default function Masthead() {
                 {currentUser.name}
               </span>
               <span className="block font-mono uppercase tracking-wide" style={{ fontSize: "10px", color: "var(--muted)" }}>
-                {currentUser.role}
+                {ROLE_LABELS[currentUser.role]}
               </span>
             </span>
           </button>
@@ -156,7 +165,7 @@ export default function Masthead() {
               className="absolute right-0 mt-1 w-60 rounded-lg border overflow-hidden"
               style={{ background: "var(--surface)", borderColor: "var(--grid)", boxShadow: "var(--shadow-lg)" }}
             >
-              {/* Role comes from the server at sign-in; there is no way to switch it here. */}
+              {/* Role comes from the server (an Admin sets it in Settings); there is no way to switch it here. */}
               <button
                 type="button"
                 role="menuitem"

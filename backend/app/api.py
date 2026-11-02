@@ -14,10 +14,10 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .auth import csrf_guard, current_user
+from .auth import admin_user, csrf_guard, current_user, is_server_admin, signed_in_user
 from .config import get_settings
 from .db import get_db
-from .models import RECORD_KINDS, STAGES as LEAD_STAGES, Lead, Record, User, lead_id_seq
+from .models import RECORD_KINDS, ROLES, STAGES as LEAD_STAGES, Lead, Record, User, lead_id_seq
 from .scoring import apply_score
 
 settings = get_settings()
@@ -43,7 +43,8 @@ def today_iso() -> str:
 
 
 def is_manager(user: User) -> bool:
-    return user.role == "Manager"
+    """Admins can do everything a Manager can, plus assign roles."""
+    return user.role in ("Manager", "Admin")
 
 
 def user_out(u: User) -> dict:
@@ -79,20 +80,27 @@ def to_int(value) -> int | None:
 # ---------------------------------------------------------------- session
 
 @router.get("/me")
-def me(user: User = Depends(current_user)):
+def me(user: User = Depends(signed_in_user)):
+    # Open to people still waiting for access, so their screen can say who
+    # they're signed in as.
     return user_out(user)
+
+
+def team(db: Session) -> list[dict]:
+    """Everyone with access. People waiting for a role aren't on the team yet."""
+    return [user_out(u) for u in db.scalars(select(User).where(User.role != "Pending").order_by(User.id))]
 
 
 @router.get("/users")
 def users(db: Session = Depends(get_db), user: User = Depends(current_user)):
-    return [user_out(u) for u in db.scalars(select(User).order_by(User.id))]
+    return team(db)
 
 
 @router.get("/bootstrap")
 def bootstrap(db: Session = Depends(get_db), user: User = Depends(current_user)):
     return {
         "me": user_out(user),
-        "users": [user_out(u) for u in db.scalars(select(User).order_by(User.id))],
+        "users": team(db),
         "leads": [lead_out(r) for r in visible_leads(db, user)],
         "records": grouped_records(db, user),
     }
@@ -605,3 +613,53 @@ def sync(body: SyncIn, db: Session = Depends(get_db), user: User = Depends(curre
         "leads": [lead_out(r) for r in leads],
         "records": [{"kind": r.kind, "id": r.id, "data": r.data} for r in records],
     }
+
+
+# ------------------------------------------------------------------ admin
+
+def stamp(dt: datetime | None) -> str | None:
+    return dt.isoformat() if dt else None
+
+
+def admin_user_out(db: Session, u: User, me: User) -> dict:
+    # A role can't be changed here when ADMIN_EMAILS sets it, or on your own
+    # account: either way an admin could lock everyone out by accident.
+    locked = "server" if is_server_admin(u.email) else ("self" if u.id == me.id else None)
+    return {
+        **user_out(u),
+        "createdAt": stamp(u.created_at),
+        "lastLogin": stamp(u.last_login),
+        "leadCount": db.scalar(select(func.count()).select_from(Lead).where(Lead.assignee_id == u.id)),
+        "locked": locked,
+    }
+
+
+@router.get("/admin/users")
+def admin_list_users(db: Session = Depends(get_db), user: User = Depends(admin_user)):
+    people = db.scalars(select(User).where(User.email != SERVICE_EMAIL).order_by(User.created_at, User.id))
+    return [admin_user_out(db, u, user) for u in people]
+
+
+class RoleIn(BaseModel):
+    role: str
+
+
+@router.put("/admin/users/{user_id}")
+def admin_set_role(user_id: int, body: RoleIn, db: Session = Depends(get_db), user: User = Depends(admin_user)):
+    if body.role not in ROLES:
+        raise HTTPException(422, "unknown role")
+    target = db.execute(select(User).where(User.id == user_id).with_for_update()).scalar_one_or_none()
+    if target is None or target.email == SERVICE_EMAIL:
+        raise HTTPException(404, "user not found")
+    if target.id == user.id:
+        raise HTTPException(409, {"code": "own_role"})
+    if is_server_admin(target.email):
+        raise HTTPException(409, {"code": "set_by_server"})
+    if target.role == "Rep" and body.role != "Rep":
+        # Only reps own leads, so a rep's leads go to someone else first.
+        owned = db.scalar(select(func.count()).select_from(Lead).where(Lead.assignee_id == target.id))
+        if owned:
+            raise HTTPException(409, {"code": "has_leads", "count": owned})
+    target.role = body.role
+    db.commit()
+    return admin_user_out(db, target, user)

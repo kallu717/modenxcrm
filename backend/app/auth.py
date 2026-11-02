@@ -1,9 +1,10 @@
 """Sign-in. Azure Entra ID (OpenID Connect, authorization-code flow) in
 production; an optional DEV_LOGIN pick-list for local development only.
 
-Roles are decided here, at login, from configuration — never from anything
-the browser sends: a user is a Manager if their email is in MANAGER_EMAILS or
-their token carries the MANAGER_GROUP_ID group; everyone else is a Rep."""
+Roles live in the database and are never taken from anything the browser
+sends. Someone signing in for the first time is Pending (no access) until an
+Admin gives them a role on the Settings page. Emails in ADMIN_EMAILS are made
+Admin on every sign-in, so the owner can't be locked out."""
 
 import logging
 from datetime import datetime, timezone
@@ -37,24 +38,24 @@ if settings.azure_configured:
         client_kwargs={"scope": "openid profile email"},
     )
 
+# The role is only used the first time each one signs in; after that the
+# Settings page decides, as it would for a real person.
 DEV_USERS = [
     ("priya@dev.local", "Priya Nair", "Rep"),
     ("arjun@dev.local", "Arjun Mehta", "Rep"),
     ("meera@dev.local", "Meera Iyer", "Manager"),
+    ("asha@dev.local", "Asha Rao", "Admin"),
+    ("newhire@dev.local", "New Hire", "Pending"),
 ]
 
 
-def role_for(email: str, groups: list[str] | None) -> str:
-    if email.lower() in settings.manager_email_set:
-        return "Manager"
-    if settings.manager_group_id and settings.manager_group_id in (groups or []):
-        return "Manager"
-    return "Rep"
+def is_server_admin(email: str) -> bool:
+    return email.strip().lower() in settings.admin_email_set
 
 
-def upsert_user(db: Session, *, email: str, name: str, role: str, oid: str | None = None) -> User:
-    """Find the user by Entra object id, then by email; create on first login.
-    Role is refreshed on every login so a promotion or removal takes effect."""
+def upsert_user(db: Session, *, email: str, name: str, oid: str | None = None, initial_role: str = "Pending") -> User:
+    """Find the user by Entra object id, then by email; create on first login
+    with `initial_role`. An existing user keeps the role an Admin gave them."""
     email = email.strip().lower()
     user = None
     if oid:
@@ -62,25 +63,41 @@ def upsert_user(db: Session, *, email: str, name: str, role: str, oid: str | Non
     if user is None:
         user = db.scalar(select(User).where(func.lower(User.email) == email))
     if user is None:
-        user = User(email=email, name=name or email, role=role, color=PALETTE[0], entra_oid=oid)
+        user = User(email=email, name=name or email, role=initial_role, color=PALETTE[0], entra_oid=oid)
         db.add(user)
         db.flush()
         user.color = PALETTE[user.id % len(PALETTE)]
     else:
-        user.role = role
         user.name = name or user.name
-        if oid and not user.entra_oid:
-            user.entra_oid = oid
+    if is_server_admin(email):
+        user.role = "Admin"
+    if oid and not user.entra_oid:
+        user.entra_oid = oid
     user.last_login = datetime.now(timezone.utc)
     db.commit()
     return user
 
 
-def current_user(request: Request, db: Session = Depends(get_db)) -> User:
+def signed_in_user(request: Request, db: Session = Depends(get_db)) -> User:
+    """Anyone with a session, including people still waiting for access."""
     uid = request.session.get("uid")
     user = db.get(User, uid) if uid else None
     if user is None:
         raise HTTPException(status_code=401, detail="not signed in")
+    return user
+
+
+def current_user(user: User = Depends(signed_in_user)) -> User:
+    """A signed-in user who has been given a role. The role is read from the
+    database on every request, so a change on the Settings page applies at once."""
+    if user.role == "Pending":
+        raise HTTPException(status_code=403, detail={"code": "pending"})
+    return user
+
+
+def admin_user(user: User = Depends(current_user)) -> User:
+    if user.role != "Admin":
+        raise HTTPException(status_code=403, detail="admins only")
     return user
 
 
@@ -115,15 +132,7 @@ async def callback(request: Request, db: Session = Depends(get_db)):
     email = claims.get("email") or claims.get("preferred_username") or ""
     if "@" not in email:
         raise HTTPException(403, "no email on the sign-in token")
-    if "groups" not in claims and "groups" in (claims.get("_claim_names") or {}):
-        log.warning("Group overage for %s: group claim not in token; role falls back to MANAGER_EMAILS", email)
-    user = upsert_user(
-        db,
-        email=email,
-        name=claims.get("name") or email,
-        role=role_for(email, claims.get("groups")),
-        oid=claims.get("oid"),
-    )
+    user = upsert_user(db, email=email, name=claims.get("name") or email, oid=claims.get("oid"))
     request.session.clear()
     request.session["uid"] = user.id
     return RedirectResponse("/")
@@ -163,7 +172,7 @@ async def dev_login(request: Request, db: Session = Depends(get_db)):
     match = next((u for u in DEV_USERS if u[0] == email), None)
     if match is None:
         raise HTTPException(400, "unknown dev user")
-    user = upsert_user(db, email=match[0], name=match[1], role=match[2])
+    user = upsert_user(db, email=match[0], name=match[1], initial_role=match[2])
     request.session.clear()
     request.session["uid"] = user.id
     return RedirectResponse("/", status_code=303)

@@ -41,14 +41,14 @@ def test_a_database_from_before_migrations_is_upgraded_in_place():
     upgrade()
     with engine.connect() as c:
         assert c.execute(text("SELECT count(*) FROM users")).scalar() == 1  # data kept
-        assert c.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0002"
+        assert c.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0003"
 
 
 def test_the_database_refuses_an_unknown_stage_or_role():
     empty_database()
     upgrade()
     with pytest.raises(IntegrityError), engine.begin() as c:
-        c.execute(text("INSERT INTO users (email, name, role, color, created_at) VALUES ('x@y.in', 'X', 'Admin', '#000', now())"))
+        c.execute(text("INSERT INTO users (email, name, role, color, created_at) VALUES ('x@y.in', 'X', 'Owner', '#000', now())"))
     with pytest.raises(IntegrityError), engine.begin() as c:
         c.execute(text(
             "INSERT INTO leads (id, account, stage, version, data, created_at, updated_at) "

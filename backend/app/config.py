@@ -16,8 +16,9 @@ class Settings(BaseSettings):
     azure_tenant_id: str = ""
     azure_client_id: str = ""
     azure_client_secret: str = ""
-    manager_emails: str = ""
-    manager_group_id: str = ""
+    # Always Admin, whatever the Settings page says, so the owner can't be
+    # locked out. Everyone else is given a role by an Admin in the app.
+    admin_emails: str = ""
 
     dev_login: bool = False
 
@@ -37,8 +38,8 @@ class Settings(BaseSettings):
         return bool(self.azure_tenant_id and self.azure_client_id and self.azure_client_secret)
 
     @property
-    def manager_email_set(self) -> set[str]:
-        return {e.strip().lower() for e in self.manager_emails.split(",") if e.strip()}
+    def admin_email_set(self) -> set[str]:
+        return {e.strip().lower() for e in self.admin_emails.split(",") if e.strip()}
 
     def check_production_safety(self) -> None:
         if self.env != "production":
@@ -50,6 +51,8 @@ class Settings(BaseSettings):
             problems.append("SESSION_SECRET must be a random string of 32+ characters")
         if not self.azure_configured:
             problems.append("AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET must be set")
+        if not self.admin_email_set:
+            problems.append("ADMIN_EMAILS must name at least one admin (nobody else could be given a role)")
         if not self.cookie_secure:
             problems.append("COOKIE_SECURE must be true (serve over HTTPS)")
         if self.ingest_api_key and len(self.ingest_api_key) < 32:

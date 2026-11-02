@@ -9,7 +9,9 @@ from .db import Base
 # The allowed values, enforced by the database itself (CHECK constraints), so
 # a bug or a hand-written SQL statement can't store a stage or role the app
 # doesn't know. Keep in step with lib/types.ts; api.py imports these.
-ROLES = ("Rep", "Manager")
+# "Pending" is someone who has signed in but hasn't been given a role yet (or
+# whose access was taken away): they can't see or change anything.
+ROLES = ("Pending", "Rep", "Manager", "Admin")
 STAGES = ("new", "contacted", "qualified", "unqualified", "proposal", "won", "lost")
 RECORD_KINDS = ("change_request", "leave_request", "leave_day", "holiday", "payment_reminder", "target")
 
@@ -29,7 +31,7 @@ class User(Base):
     entra_oid: Mapped[str | None] = mapped_column(String(64), unique=True)
     email: Mapped[str] = mapped_column(String(320), unique=True)
     name: Mapped[str] = mapped_column(String(200))
-    role: Mapped[str] = mapped_column(String(16))  # "Rep" | "Manager"
+    role: Mapped[str] = mapped_column(String(16))  # one of ROLES; an Admin assigns it
     color: Mapped[str] = mapped_column(String(9))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

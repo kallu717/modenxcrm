@@ -46,6 +46,16 @@ def meera():
     return signed_in("meera@dev.local")
 
 
+@pytest.fixture
+def asha():
+    return signed_in("asha@dev.local")   # Admin
+
+
+@pytest.fixture
+def newhire():
+    return signed_in("newhire@dev.local")   # signed in, no role yet
+
+
 ROW = {"name": "Ananya Sharma", "title": "Marketing Head", "account": "Studio Weft", "type": "Brand",
        "email": "ananya@studioweft.com", "verified": "Yes", "phone": "+91 9812345678", "city": "Bengaluru"}
 
