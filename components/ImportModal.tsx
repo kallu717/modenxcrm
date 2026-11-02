@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { IMPORT_COLUMNS, readSheet, stageImport, templateTsv, type StagedImport } from "@/lib/import";
+import { api, describeError } from "@/lib/api";
+import { adoptLeads } from "@/lib/sync";
 
 type Step = "choose" | "template" | "upload";
 
@@ -11,21 +13,51 @@ const btnStyle = { borderColor: "var(--grid)", color: "var(--ink)" };
 
 export default function ImportModal({ onClose }: { onClose: () => void }) {
   const leads = useStore((s) => s.leads);
-  const importLeads = useStore((s) => s.importLeads);
+  const currentUserId = useStore((s) => s.currentUserId);
   const isManager = useStore((s) => s.isManager());
   const showToast = useStore((s) => s.showToast);
   const [step, setStep] = useState<Step>("choose");
   const [staged, setStaged] = useState<StagedImport | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
   const [copyFallback, setCopyFallback] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
+  // The sheet is checked here first (missing columns, bad types, emails you
+  // can see), then by the server, which also knows every other rep's leads.
+  // Rows the server would skip are dropped from the preview.
   const handleFile = async (file: File) => {
     setReadError(null);
     setStaged(null);
+    let local: StagedImport;
     try {
-      setStaged(stageImport(await readSheet(file), file.name, leads));
+      local = stageImport(await readSheet(file), file.name, leads);
     } catch {
       setReadError("Couldn't read that file — is it a valid spreadsheet?");
+      return;
+    }
+    if (!local.rows.length) {
+      setStaged(local);
+      return;
+    }
+    try {
+      const dry = await api.importLeads(local.rows, local.filename, true);
+      const skipped = new Set<number>();
+      const issues = dry.issues.map((t) => {
+        const m = /^Row (\d+): (.*)$/.exec(t);
+        if (!m) return t;
+        skipped.add(Number(m[1]) - 2); // the server numbers the rows it was sent, from 2
+        return m[2].replace("already exists", "is already in the CRM");
+      });
+      setStaged({
+        ...local,
+        rows: local.rows.filter((_, i) => !skipped.has(i)),
+        newAccounts: dry.newAccounts,
+        duplicates: local.duplicates + dry.duplicates,
+        rejected: local.rejected + dry.rejected,
+        issues: [...local.issues, ...issues],
+      });
+    } catch (e) {
+      setReadError(describeError(e));
     }
   };
 
@@ -38,15 +70,24 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const confirmImport = () => {
-    if (!staged) return;
-    const { count, toOwnAccount } = importLeads(staged.rows, staged.filename);
-    showToast(
-      !isManager && toOwnAccount
-        ? `Imported ${count} lead${count === 1 ? "" : "s"} — ${toOwnAccount} assigned to you`
-        : `Imported ${count} lead${count === 1 ? "" : "s"}`
-    );
-    onClose();
+  const confirmImport = async () => {
+    if (!staged || busy) return;
+    setBusy(true);
+    try {
+      const res = await api.importLeads(staged.rows, staged.filename, false);
+      adoptLeads(res.created);
+      const count = res.createdCount;
+      const toOwnAccount = res.created.filter((x) => x.lead.assignee === currentUserId).length;
+      showToast(
+        !isManager && toOwnAccount
+          ? `Imported ${count} lead${count === 1 ? "" : "s"} — ${toOwnAccount} assigned to you`
+          : `Imported ${count} lead${count === 1 ? "" : "s"}`
+      );
+      onClose();
+    } catch (e) {
+      setReadError(describeError(e));
+      setBusy(false);
+    }
   };
 
   return (
@@ -195,7 +236,7 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
             <div className="flex justify-end gap-2 mt-5">
               <button type="button" className={btn} style={btnStyle} onClick={() => setStep("choose")}>Back</button>
               {staged && staged.rows.length > 0 && (
-                <button type="button" className="px-3 py-1.5 rounded-md text-[13px] text-white" style={{ background: "var(--accent)" }} onClick={confirmImport}>
+                <button type="button" disabled={busy} className="px-3 py-1.5 rounded-md text-[13px] text-white disabled:opacity-60" style={{ background: "var(--accent)" }} onClick={confirmImport}>
                   Import {staged.rows.length} lead{staged.rows.length === 1 ? "" : "s"}
                 </button>
               )}

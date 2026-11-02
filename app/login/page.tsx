@@ -1,7 +1,3 @@
-"use client";
-
-import { useStore } from "@/lib/store";
-
 function MicrosoftLogo() {
   return (
     <svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true">
@@ -14,8 +10,6 @@ function MicrosoftLogo() {
 }
 
 export default function LoginPage() {
-  const login = useStore((s) => s.login);
-
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
       <div
@@ -35,16 +29,16 @@ export default function LoginPage() {
           Sign in with your ModenX work account to continue.
         </p>
 
-        {/* Placeholder: Phase 2 hands this off to Entra ID via Auth.js. */}
-        <button
-          type="button"
-          onClick={login}
+        {/* A full page load, not client routing: the server sends the browser on
+            to Microsoft and back, then sets the session cookie. */}
+        <a
+          href="/auth/login"
           className="mt-6 w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-md text-[13.5px] font-medium border"
           style={{ borderColor: "var(--rule)", background: "var(--surface)", color: "var(--ink)" }}
         >
           <MicrosoftLogo />
           Sign in with Microsoft
-        </button>
+        </a>
 
         <p className="mt-5 text-[11px]" style={{ color: "var(--muted)" }}>
           Single sign-on only. Contact your administrator if you can&apos;t access your account.

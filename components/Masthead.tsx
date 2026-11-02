@@ -6,6 +6,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { followupBucket } from "@/lib/dates";
 import { duePayments } from "@/lib/revenue";
+import { signOut } from "@/lib/sync";
+import { ROLE_LABELS } from "@/lib/types";
 
 const NAV_ITEMS = [
   { href: "/pipeline", label: "Pipeline" },
@@ -15,9 +17,11 @@ const NAV_ITEMS = [
   { href: "/reports", label: "Reports", managerOnly: true },
   { href: "/revenue", label: "Revenue", managerOnly: true },
   { href: "/calendar", label: "Calendar", badge: "calendar" },
+  { href: "/settings", label: "Settings", adminOnly: true },
 ] as const;
 
 const MANAGER_ONLY_PATHS = ["/reports", "/revenue"];
+const ADMIN_ONLY_PATHS = ["/settings"];
 
 function initials(name: string): string {
   return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -26,16 +30,14 @@ function initials(name: string): string {
 export default function Masthead() {
   const pathname = usePathname();
   const router = useRouter();
-  const reps = useStore((s) => s.reps);
   const leads = useStore((s) => s.leads);
   const changeRequests = useStore((s) => s.changeRequests);
   const leaveRequests = useStore((s) => s.leaveRequests);
   const paymentReminders = useStore((s) => s.paymentReminders);
   const currentUserId = useStore((s) => s.currentUserId);
-  const setCurrentUser = useStore((s) => s.setCurrentUser);
-  const logout = useStore((s) => s.logout);
   const currentUser = useStore((s) => s.currentUser());
-  const isManager = currentUser.role === "Manager";
+  const isManager = useStore((s) => s.isManager());
+  const isAdmin = useStore((s) => s.isAdmin());
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -64,8 +66,11 @@ export default function Masthead() {
   }, []);
 
   useEffect(() => {
-    if (!isManager && MANAGER_ONLY_PATHS.some((p) => pathname?.startsWith(p))) router.replace("/pipeline");
-  }, [isManager, pathname, router]);
+    const blocked =
+      (!isManager && MANAGER_ONLY_PATHS.some((p) => pathname?.startsWith(p))) ||
+      (!isAdmin && ADMIN_ONLY_PATHS.some((p) => pathname?.startsWith(p)));
+    if (blocked) router.replace("/pipeline");
+  }, [isManager, isAdmin, pathname, router]);
 
   return (
     <header className="sticky top-0 z-50 border-b" style={{ background: "var(--bg)", borderColor: "var(--grid)" }}>
@@ -83,7 +88,9 @@ export default function Masthead() {
         </div>
 
         <nav className="flex items-center gap-1 flex-1 flex-wrap" aria-label="View">
-          {NAV_ITEMS.filter((item) => !("managerOnly" in item) || isManager).map((item) => {
+          {NAV_ITEMS.filter(
+            (item) => (!("managerOnly" in item) || isManager) && (!("adminOnly" in item) || isAdmin)
+          ).map((item) => {
             const active = pathname?.startsWith(item.href);
             const count = "badge" in item ? badges[item.badge] : 0;
             return (
@@ -148,7 +155,7 @@ export default function Masthead() {
                 {currentUser.name}
               </span>
               <span className="block font-mono uppercase tracking-wide" style={{ fontSize: "10px", color: "var(--muted)" }}>
-                {currentUser.role}
+                {ROLE_LABELS[currentUser.role]}
               </span>
             </span>
           </button>
@@ -158,51 +165,19 @@ export default function Masthead() {
               className="absolute right-0 mt-1 w-60 rounded-lg border overflow-hidden"
               style={{ background: "var(--surface)", borderColor: "var(--grid)", boxShadow: "var(--shadow-lg)" }}
             >
-              <p
-                className="px-3 pt-2.5 pb-1 font-mono uppercase tracking-wide"
-                style={{ fontSize: "9.5px", color: "var(--muted)" }}
+              {/* Role comes from the server (an Admin sets it in Settings); there is no way to switch it here. */}
+              <button
+                type="button"
+                role="menuitem"
+                className="w-full px-3 py-2.5 text-left text-[13px] font-medium"
+                style={{ color: "var(--crit)" }}
+                onClick={() => {
+                  setMenuOpen(false);
+                  void signOut();
+                }}
               >
-                Switch user (testing)
-              </p>
-              {reps.map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  role="menuitem"
-                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-[13px]"
-                  style={{ color: "var(--ink)", background: r.id === currentUserId ? "var(--accent-soft)" : "transparent" }}
-                  onClick={() => {
-                    setCurrentUser(r.id);
-                    setMenuOpen(false);
-                  }}
-                >
-                  <span
-                    className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-semibold"
-                    style={{ background: r.color }}
-                  >
-                    {initials(r.name)}
-                  </span>
-                  <span>{r.name}</span>
-                  <span className="ml-auto font-mono uppercase" style={{ fontSize: "9.5px", color: "var(--muted)" }}>
-                    {r.role}
-                  </span>
-                </button>
-              ))}
-              <div className="border-t" style={{ borderColor: "var(--grid)" }}>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="w-full px-3 py-2.5 text-left text-[13px] font-medium"
-                  style={{ color: "var(--crit)" }}
-                  onClick={() => {
-                    setMenuOpen(false);
-                    logout();
-                    router.replace("/login");
-                  }}
-                >
-                  Log out
-                </button>
-              </div>
+                Log out
+              </button>
             </div>
           )}
         </div>

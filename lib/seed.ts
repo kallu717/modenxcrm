@@ -1,11 +1,21 @@
 import { isoToday, isoPlusDays, fmtShortDate } from "./dates";
 import { scoreLead, bandForScore, isClosedStage } from "./scoring";
 import {
-  REPS, STAGES, MAIN_STAGE_PATH, FIRST, LAST, BRANDS, MALLS, STORES,
+  STAGES, MAIN_STAGE_PATH, FIRST, LAST, BRANDS, MALLS, STORES,
   FN_BRAND, FN_MALL, FN_STORE, CITIES, LOCALITY_CITY, MALL_CITY,
-  MEETING_MODES, MEETING_NOTES, NOTES_BY_METHOD, repsList, repById,
+  MEETING_MODES, MEETING_NOTES, NOTES_BY_METHOD,
 } from "./constants";
-import type { AccountType, CompanyHoliday, Lead, RepLeave, Stage } from "./types";
+import type { AccountType, CompanyHoliday, Lead, Rep, RepLeave, Stage } from "./types";
+
+// Made-up data for tests only. The app itself never loads it: real users and
+// leads come from the server.
+export const DEMO_REPS: Rep[] = [
+  { id: "priya", name: "Priya Nair", role: "Rep", color: "#1f6f5c" },
+  { id: "arjun", name: "Arjun Mehta", role: "Rep", color: "#b9791a" },
+  { id: "meera", name: "Meera Iyer", role: "Manager", color: "#c23b3b" },
+];
+const repsList = () => DEMO_REPS.filter((r) => r.role === "Rep");
+const repById = (id: string | null) => DEMO_REPS.find((r) => r.id === id);
 
 function seedRand(seed: number) {
   let s = seed;
@@ -258,5 +268,3 @@ export function generateSeed(): SeedResult {
 
   return { leads, companyHolidays, repLeaves };
 }
-
-export { REPS };

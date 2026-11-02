@@ -1,10 +1,12 @@
 import type { Rep, StageDef } from "./types";
 
-export const REPS: Rep[] = [
-  { id: "priya", name: "Priya Nair", role: "Rep", color: "#1f6f5c" },
-  { id: "arjun", name: "Arjun Mehta", role: "Rep", color: "#b9791a" },
-  { id: "meera", name: "Meera Iyer", role: "Manager", color: "#c23b3b" },
-];
+// The people who can sign in. Filled from the server's user list when the app
+// loads (lib/sync.ts); nobody is hard-coded here.
+let directory: Rep[] = [];
+
+export function setDirectory(reps: Rep[]) {
+  directory = reps;
+}
 
 export const STAGES: StageDef[] = [
   { id: "new", name: "New", dot: "var(--muted)" },
@@ -99,10 +101,10 @@ export const ACCOUNT_EDITABLE_FIELDS = [
 ] as const;
 
 export function repsList(): Rep[] {
-  return REPS.filter((r) => r.role === "Rep");
+  return directory.filter((r) => r.role === "Rep");
 }
 
 export function repById(id: string | null): Rep | undefined {
   if (!id) return undefined;
-  return REPS.find((r) => r.id === id);
+  return directory.find((r) => r.id === id);
 }
