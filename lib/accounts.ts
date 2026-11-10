@@ -14,13 +14,56 @@ export const STAGE_PROGRESS: Stage[] = [
 ];
 export const PRIORITY_ORDER: Priority[] = ["Hot", "Warm", "Nurture", "Low"];
 
+// An account is split into locations by its contacts' city; each location
+// has its own owner. An account in one city is simply one location, so
+// handing over "the account" and handing over "its only location" are the
+// same thing. Blank and "—" count as one location of their own.
+export function locationKey(city: string | null | undefined): string {
+  const c = (city || "").trim().toLowerCase();
+  return c === "" || c === "—" || c === "-" ? "" : c;
+}
+
+export interface LocationSummary {
+  key: string;
+  city: string; // display name ("No city" when unknown)
+  contacts: Lead[];
+  owner: string | null;
+  furthest: Stage;
+  agingDays: number | null;
+}
+
+export function buildLocations(contacts: Lead[]): LocationSummary[] {
+  const map = new Map<string, Lead[]>();
+  contacts.forEach((c) => {
+    const k = locationKey(c.city);
+    map.set(k, [...(map.get(k) || []), c]);
+  });
+  return [...map.entries()]
+    .map(([key, group]) => {
+      const furthest = STAGE_PROGRESS.find((s) => group.some((c) => c.stage === s)) || "new";
+      return {
+        key,
+        city: key ? group.find((c) => locationKey(c.city) === key)!.city.trim() : "No city",
+        contacts: group,
+        owner: group.find((c) => c.assignee)?.assignee || null,
+        furthest,
+        agingDays: isClosedStage(furthest) ? null : accountAgingDays(furthest, group),
+      };
+    })
+    .sort((a, b) => b.contacts.length - a.contacts.length || a.city.localeCompare(b.city));
+}
+
 export interface AccountSummary {
   name: string;
   type: AccountType;
   contacts: Lead[];
   furthest: Stage;
   priority: Priority;
+  // The one owner when every assigned location has the same owner, else null.
   owner: string | null;
+  // Everyone who owns at least one location of this account.
+  owners: string[];
+  locations: LocationSummary[];
   functions: string[];
   cities: string[];
   domain: string;
@@ -44,8 +87,9 @@ export function buildAccounts(leadPool: Lead[]): AccountSummary[] {
     .map(([name, contacts]) => {
       const furthest = STAGE_PROGRESS.find((s) => contacts.some((c) => c.stage === s)) || "new";
       const priority = PRIORITY_ORDER.find((p) => contacts.some((c) => effectivePriority(c) === p)) || "Low";
-      // One rep per account is the rule — every contact here shares one assignee.
-      const owner = contacts.find((c) => c.assignee)?.assignee || null;
+      const locations = buildLocations(contacts);
+      const owners = [...new Set(locations.map((l) => l.owner).filter((o): o is string => !!o))];
+      const owner = owners.length === 1 ? owners[0] : null;
       const functions = [...new Set(contacts.map((c) => c.title))];
       const cities = [...new Set(contacts.map((c) => c.city))];
       const domain = (contacts.find((c) => c.email)?.email || "").split("@")[1] || "—";
@@ -66,6 +110,8 @@ export function buildAccounts(leadPool: Lead[]): AccountSummary[] {
         furthest,
         priority,
         owner,
+        owners,
+        locations,
         functions,
         cities,
         domain,

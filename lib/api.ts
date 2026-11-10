@@ -116,8 +116,12 @@ export function describeError(e: unknown): string {
       return "Another lead already has that email.";
     case "account_name_taken":
       return `Another account is already named ${typeof d === "object" && d?.account}.`;
+    case "location_has_two_owners": {
+      const city = typeof d === "object" && d ? (d as { city?: string }).city : "";
+      return `That would give one location (${city}) two owners. Assign that city as a whole instead.`;
+    }
     case "account_has_two_owners":
-      return "That would give one account two reps. Assign the whole account instead.";
+      return "That would give one account two owners. Assign the whole account instead.";
     case "needs_manager":
       return "That change needs a manager's approval.";
     case "invalid_lead": {
@@ -133,7 +137,7 @@ export function describeError(e: unknown): string {
       return "This person is an admin in the server settings (ADMIN_EMAILS), so their role can't be changed here.";
     case "has_leads": {
       const n = typeof d === "object" && d?.count;
-      return `This rep still has ${n} lead${n === 1 ? "" : "s"}. Reassign them first, then change the role.`;
+      return `This person still owns ${n} lead${n === 1 ? "" : "s"}. Admins can't own accounts, so reassign them first.`;
     }
     case "pending":
       return "Your account is waiting for an admin to give you access.";

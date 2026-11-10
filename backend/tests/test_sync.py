@@ -26,14 +26,83 @@ def test_assigning_an_account_moves_every_contact_in_one_save(meera, priya):
     assert len(priya.get("/api/leads").json()) == 2
 
 
-def test_an_account_never_has_two_reps(meera, priya, arjun):
-    import_rows(meera, [ROW, ROHAN])
+def test_one_location_never_has_two_owners(meera, priya, arjun):
+    import_rows(meera, [ROW, ROHAN])          # both Studio Weft, both Bengaluru
     rows = list(_all(meera).values())
-    # only half the account handed over: the second contact would stay with no one, which is allowed
+    # only half the location handed over: the second contact would stay with no one, which is allowed
     assert meera.post("/api/sync", json={"leads": [_put(rows[0], assignee=_uid(priya))]}).status_code == 200
-    # but giving the other contact to a different rep splits the account
+    # but giving the other Bengaluru contact to a different person splits the location
     r = meera.post("/api/sync", json={"leads": [_put(rows[1], assignee=_uid(arjun))]})
-    assert r.status_code == 409 and r.json()["detail"]["code"] == "account_has_two_owners"
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "location_has_two_owners"
+    assert r.json()["detail"]["city"] == "bengaluru"
+
+
+MUMBAI = dict(ROW, name="Meena Pillai", email="meena@studioweft.com", city="Mumbai")
+
+
+def test_each_city_of_an_account_can_have_its_own_owner(meera, priya, arjun):
+    import_rows(meera, [ROW, ROHAN, MUMBAI])
+    rows = _all(meera)
+    pid, aid = _uid(priya), _uid(arjun)
+    r = meera.post("/api/sync", json={"leads": [
+        _put(rows[ROW["email"]], assignee=pid), _put(rows[ROHAN["email"]], assignee=pid),
+        _put(rows[MUMBAI["email"]], assignee=aid),
+    ]})
+    assert r.status_code == 200
+    # each sees only their own city's contacts of the same account
+    assert {x["lead"]["city"] for x in priya.get("/api/leads").json()} == {"Bengaluru"}
+    assert {x["lead"]["city"] for x in arjun.get("/api/leads").json()} == {"Mumbai"}
+
+
+def test_city_names_are_matched_loosely_and_blank_city_is_one_location(meera, priya, arjun):
+    import_rows(meera, [ROW, dict(ROHAN, city=" bengaluru "),
+                        dict(LUMA, city=""), dict(LUMA, name="Asha", email="asha@luma.in", city="—")])
+    rows = _all(meera)
+    r = meera.post("/api/sync", json={"leads": [_put(rows[ROW["email"]], assignee=_uid(priya)),
+                                                 _put(rows[ROHAN["email"]], assignee=_uid(arjun))]})
+    assert r.status_code == 409          # "Bengaluru" and " bengaluru " are the same city
+    r = meera.post("/api/sync", json={"leads": [_put(rows[LUMA["email"]], assignee=_uid(priya)),
+                                                 _put(rows["asha@luma.in"], assignee=_uid(arjun))]})
+    assert r.status_code == 409          # no city and "—" are the same (unknown) location
+
+
+def test_a_new_city_under_an_assigned_account_starts_unassigned(meera, priya):
+    import_rows(meera, [ROW])
+    first = _all(meera)[ROW["email"]]
+    assert meera.post("/api/sync", json={"leads": [_put(first, assignee=_uid(priya))]}).status_code == 200
+    import_rows(meera, [ROHAN, MUMBAI])
+    rows = _all(meera)
+    assert rows[ROHAN["email"]]["lead"]["assignee"] == _uid(priya)    # same city: joins its owner
+    assert rows[MUMBAI["email"]]["lead"]["assignee"] is None          # new city: waits for a manager
+
+
+def test_a_rep_adding_a_contact_in_a_new_city_keeps_it(meera, priya, arjun):
+    import_rows(meera, [ROW])
+    first = _all(meera)[ROW["email"]]
+    meera.post("/api/sync", json={"leads": [_put(first, assignee=_uid(priya))]})
+    # arjun finds someone at Studio Weft in Mumbai himself: it's his
+    res = import_rows(arjun, [MUMBAI]).json()
+    assert res["created"][0]["lead"]["assignee"] == _uid(arjun)
+    # and a contact he adds in Bengaluru stays with priya, who owns that city
+    res = import_rows(arjun, [ROHAN]).json()
+    assert res["createdCount"] == 1 and res["created"] == []
+    joined = _all(meera)[ROHAN["email"]]["lead"]
+    assert joined["assignee"] == _uid(priya)
+    assert "Studio Weft · Bengaluru is already owned by Priya Nair" in joined["activity"][0]["txt"]
+
+
+def test_moving_a_contact_to_another_city_must_follow_that_citys_owner(meera, priya, arjun):
+    import_rows(meera, [ROW, MUMBAI])
+    rows = _all(meera)
+    meera.post("/api/sync", json={"leads": [_put(rows[ROW["email"]], assignee=_uid(priya)),
+                                             _put(rows[MUMBAI["email"]], assignee=_uid(arjun))]})
+    rows = _all(meera)
+    # correcting the Mumbai contact's city to Bengaluru while leaving it with arjun splits Bengaluru
+    r = meera.post("/api/sync", json={"leads": [_put(rows[MUMBAI["email"]], city="Bengaluru")]})
+    assert r.status_code == 409
+    # moving it together with its new owner is fine
+    r = meera.post("/api/sync", json={"leads": [_put(rows[MUMBAI["email"]], city="Bengaluru", assignee=_uid(priya))]})
+    assert r.status_code == 200
 
 
 def test_a_failed_save_changes_nothing(meera, priya, arjun):

@@ -69,7 +69,7 @@ function PersonRow({ u, busy, onChange }: { u: AdminUser; busy: boolean; onChang
         {fmtWhen(u.lastLogin)}
       </td>
       <td className="py-2.5 pr-3 text-[12px] font-mono text-right" style={{ color: "var(--muted)" }}>
-        {u.role === "Rep" ? u.leadCount : "—"}
+        {u.role === "Rep" || u.role === "Manager" ? u.leadCount : "—"}
       </td>
     </tr>
   );

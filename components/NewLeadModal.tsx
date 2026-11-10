@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { CITIES, repById } from "@/lib/constants";
+import { locationKey } from "@/lib/accounts";
 import { api, describeError } from "@/lib/api";
 import { adoptLeads } from "@/lib/sync";
 import type { AccountType } from "@/lib/types";
@@ -14,6 +15,7 @@ const inputStyle = { borderColor: "var(--grid)", background: "var(--surface)", c
 export default function NewLeadModal({ onClose }: { onClose: () => void }) {
   const leads = useStore((s) => s.leads);
   const showToast = useStore((s) => s.showToast);
+  const isManager = useStore((s) => s.isManager());
 
   const [form, setForm] = useState({
     name: "",
@@ -33,7 +35,15 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
     () => leads.find((l) => l.account.toLowerCase() === form.account.trim().toLowerCase()),
     [leads, form.account]
   );
-  const existingOwner = existingAccount ? repById(existingAccount.assignee) : null;
+  // Owners are per city: the contact joins whoever owns this city at the account.
+  const existingOwner = useMemo(() => {
+    if (!existingAccount) return null;
+    const key = locationKey(form.city);
+    const owned = leads.find(
+      (l) => l.account === existingAccount.account && locationKey(l.city) === key && l.assignee
+    );
+    return owned ? repById(owned.assignee) : null;
+  }, [leads, existingAccount, form.city]);
 
   const set = <K extends keyof typeof form>(key: K, v: (typeof form)[K]) =>
     setForm((s) => ({ ...s, [key]: v }));
@@ -93,8 +103,8 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
           New lead
         </h3>
         <p className="text-[12.5px] mt-1" style={{ color: "var(--muted)" }}>
-          Everything except phone is required. If the account already exists, this contact joins it
-          under its current owner automatically.
+          Everything except phone is required. If the account already exists, this contact joins
+          whoever owns its city there.
         </p>
 
         <div className="grid grid-cols-2 gap-3 mt-4">
@@ -139,7 +149,11 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
                   {existingAccount.type}
                 </span>
                 Existing account —{" "}
-                {existingOwner ? `owned by ${existingOwner.name}. This contact will join them.` : "currently unassigned."}
+                {existingOwner
+                  ? `${form.city.trim() || "this city"} is owned by ${existingOwner.name}. This contact will join them.`
+                  : form.city.trim()
+                    ? `nobody owns ${form.city.trim()} there yet, so ${isManager ? "it will wait for you to assign it" : "it will be yours"}.`
+                    : "enter a city to see who it goes to."}
               </p>
             )}
           </div>

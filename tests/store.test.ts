@@ -79,11 +79,22 @@ describe("K. Adding leads", () => {
     expect(store().createLead(input())?.assignee).toBe("priya");
   });
 
-  it("K2 rep adding at Arjun's account — it stays with Arjun", () => {
+  it("K2 rep adding in a city Arjun owns at his account — it stays with Arjun", () => {
     as("priya");
-    const l = store().createLead(input({ account: "Luma Home" }))!;
+    const l = store().createLead(input({ account: "Luma Home", city: "Mumbai" }))!;
     expect(l.assignee).toBe("arjun");
-    expect(l.activity[0].txt).toContain("Account already owned by Arjun Mehta");
+    expect(l.activity[0].txt).toContain("Luma Home · Mumbai is already owned by Arjun Mehta");
+  });
+
+  it("K2b rep adding in a new city of Arjun's account — that city is hers", () => {
+    as("priya");
+    const l = store().createLead(input({ account: "Luma Home", city: "Pune" }))!;
+    expect(l.assignee).toBe("priya");
+  });
+
+  it("K2c manager adding in a new city of an assigned account — waits unassigned", () => {
+    const l = store().createLead(input({ account: "Luma Home", city: "Pune" }))!;
+    expect(l.assignee).toBeNull();
   });
 
   it("K3 manager adding at a new account leaves it unassigned", () => {
@@ -123,10 +134,10 @@ describe("K. Adding leads", () => {
 
   it("K9 'studio weft' joins the existing 'Studio Weft' and its owner", () => {
     as("priya");
-    store().importLeads([importRow({ account: "studio weft" })], "sheet.xlsx");
+    store().importLeads([importRow({ account: "studio weft", city: "mumbai " })], "sheet.xlsx");
     const added = store().leads.find((l) => l.name === "Imported Person")!;
     expect(added.account).toBe("Studio Weft");
-    expect(added.assignee).toBe("arjun");
+    expect(added.assignee).toBe("arjun"); // same city, however it's typed
   });
 });
 

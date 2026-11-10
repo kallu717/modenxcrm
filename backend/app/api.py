@@ -47,6 +47,17 @@ def is_manager(user: User) -> bool:
     return user.role in ("Manager", "Admin")
 
 
+# Who can be given accounts. Managers often sell too; Admins only administer.
+ASSIGNABLE_ROLES = ("Rep", "Manager")
+
+
+def location_key(city) -> str:
+    """An account is split into locations by its contacts' city. Blank and
+    "—" (no city given) count as one location of their own."""
+    c = (city or "").strip().lower()
+    return "" if c in ("", "—", "-") else c
+
+
 def user_out(u: User) -> dict:
     return {"id": str(u.id), "name": u.name, "role": u.role, "color": u.color, "email": u.email}
 
@@ -87,8 +98,10 @@ def me(user: User = Depends(signed_in_user)):
 
 
 def team(db: Session) -> list[dict]:
-    """Everyone with access. People waiting for a role aren't on the team yet."""
-    return [user_out(u) for u in db.scalars(select(User).where(User.role != "Pending").order_by(User.id))]
+    """Everyone with access. People waiting for a role aren't on the team yet,
+    and the machine-import account is never on it."""
+    q = select(User).where(User.role != "Pending", User.email != SERVICE_EMAIL).order_by(User.id)
+    return [user_out(u) for u in db.scalars(q)]
 
 
 @router.get("/users")
@@ -187,8 +200,8 @@ def update_lead(db: Session, user: User, lead_id: str, version: int, lead: dict,
     assignee_id = to_int(new.get("assignee"))
     if new.get("assignee") is not None:
         target = db.get(User, assignee_id) if assignee_id else None
-        if target is None or target.role != "Rep":
-            raise HTTPException(422, "a lead can only be assigned to a rep")
+        if target is None or target.role not in ASSIGNABLE_ROLES or target.email == SERVICE_EMAIL:
+            raise HTTPException(422, "a lead can only be assigned to a rep or a manager")
         new["assignee"] = str(target.id)
     else:
         assignee_id = None
@@ -218,8 +231,10 @@ def check_accounts(db: Session, renamed: dict[str, str], accounts: set[str]) -> 
     - renaming onto a name another account already uses is refused, since it
       would merge two accounts (case-insensitive; a whole account renamed in
       one batch is fine);
-    - one account, one owner: the contacts at an account never have two
-      different reps (unassigned contacts don't count)."""
+    - one location, one owner: an account is split into locations by city,
+      and the contacts at one location never have two different owners
+      (unassigned contacts don't count). Different cities of the same
+      account may have different owners."""
     lock_accounts(db, accounts)
     for lead_id in renamed:
         new_name = db.get(Lead, lead_id).account
@@ -229,13 +244,15 @@ def check_accounts(db: Session, renamed: dict[str, str], accounts: set[str]) -> 
         if clash is not None:
             raise HTTPException(409, {"code": "account_name_taken", "account": new_name})
     for name in {a.lower() for a in accounts}:
-        owners = db.scalar(
-            select(func.count(func.distinct(Lead.assignee_id))).where(
-                func.lower(Lead.account) == name, Lead.assignee_id.is_not(None)
-            )
+        owners: dict[str, set[int]] = {}
+        q = select(Lead.data["city"].astext, Lead.assignee_id).where(
+            func.lower(Lead.account) == name, Lead.assignee_id.is_not(None)
         )
-        if owners > 1:
-            raise HTTPException(409, {"code": "account_has_two_owners", "account": name})
+        for city, owner in db.execute(q):
+            owners.setdefault(location_key(city), set()).add(owner)
+        for loc, ids in owners.items():
+            if len(ids) > 1:
+                raise HTTPException(409, {"code": "location_has_two_owners", "account": name, "city": loc or "no city"})
 
 
 def remove_lead(db: Session, user: User, lead_id: str) -> None:
@@ -278,7 +295,12 @@ FIELD_LABELS = (("name", "Contact name"), ("title", "Job title"), ("account", "A
 def process_rows(db: Session, user: User, rows: list[LeadIn], source: str, *, dry_run: bool, strict: bool):
     """Shared by CSV/XLSX import and the New lead form. Validates every row,
     drops duplicate emails (against the whole database, not just what this
-    user can see), resolves the owning rep, and — unless dry_run — inserts."""
+    user can see), resolves the owner, and — unless dry_run — inserts.
+
+    Owners are per location (account + city): a contact joins whoever owns
+    its city at that account. A city the account doesn't have an owner for
+    yet starts unassigned for a manager to hand out, unless a rep is adding
+    the contact themselves, in which case it's theirs."""
     issues, valid = [], []
     emails = {r.email.lower() for r in rows if r.email}
     existing_emails = set(db.scalars(select(Lead.email_lc).where(Lead.email_lc.in_(emails)))) if emails else set()
@@ -286,16 +308,18 @@ def process_rows(db: Session, user: User, rows: list[LeadIn], source: str, *, dr
     # account takes that account's exact name and type, so one account never
     # splits in two. Keys below are lower-cased names.
     accounts = {r.account.lower() for r in rows if r.account}
-    owners: dict[str, int] = {}
+    owners: dict[tuple[str, str], int] = {}
     canonical: dict[str, tuple[str, str]] = {}
     if accounts and not dry_run:
         lock_accounts(db, accounts)
     if accounts:
-        q = select(Lead.account, Lead.assignee_id, Lead.data["type"].astext).where(func.lower(Lead.account).in_(accounts))
-        for acct, owner, acct_type in db.execute(q):
+        q = select(Lead.account, Lead.assignee_id, Lead.data["type"].astext, Lead.data["city"].astext).where(
+            func.lower(Lead.account).in_(accounts)
+        )
+        for acct, owner, acct_type, city in db.execute(q):
             canonical.setdefault(acct.lower(), (acct, acct_type))
             if owner is not None:
-                owners.setdefault(acct.lower(), owner)
+                owners.setdefault((acct.lower(), location_key(city)), owner)
     known_accounts = set(canonical)
     seen_emails: set[str] = set()
     duplicates = 0
@@ -343,13 +367,15 @@ def process_rows(db: Session, user: User, rows: list[LeadIn], source: str, *, dr
         key = r.account.lower()
         # Rows earlier in this same sheet count as existing accounts too.
         account, acct_type = canonical.setdefault(key, (r.account, r.type))
-        existing_owner = owners.get(key)
+        loc = (key, location_key(r.city))
+        existing_owner = owners.get(loc)
         assignee = existing_owner or (user.id if not is_manager(user) else None)
         if assignee is not None:
-            owners.setdefault(key, assignee)
+            owners.setdefault(loc, assignee)
         bits = [source]
         if existing_owner and existing_owner != user.id:
-            bits.append(f"Account already owned by {names.get(existing_owner, 'another rep')} — kept with them.")
+            where = f"{account} · {r.city}" if location_key(r.city) else account
+            bits.append(f"{where} is already owned by {names.get(existing_owner, 'someone else')} — kept with them.")
         if r.notes:
             bits.append(f"Note: {r.notes}")
         n = db.execute(select(lead_id_seq.next_value())).scalar_one()
@@ -655,8 +681,10 @@ def admin_set_role(user_id: int, body: RoleIn, db: Session = Depends(get_db), us
         raise HTTPException(409, {"code": "own_role"})
     if is_server_admin(target.email):
         raise HTTPException(409, {"code": "set_by_server"})
-    if target.role == "Rep" and body.role != "Rep":
-        # Only reps own leads, so a rep's leads go to someone else first.
+    if body.role not in ASSIGNABLE_ROLES:
+        # Only reps and managers own leads. Someone moving to Admin (or back
+        # to waiting) hands their leads to someone else first; rep <-> manager
+        # keeps them.
         owned = db.scalar(select(func.count()).select_from(Lead).where(Lead.assignee_id == target.id))
         if owned:
             raise HTTPException(409, {"code": "has_leads", "count": owned})

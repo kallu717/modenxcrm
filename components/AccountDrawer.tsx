@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
-import { STAGES, ACCOUNT_EDITABLE_FIELDS, repById, repsList } from "@/lib/constants";
+import { STAGES, ACCOUNT_EDITABLE_FIELDS, repById, assignableList } from "@/lib/constants";
 import { buildAccounts } from "@/lib/accounts";
 import { effectivePriority } from "@/lib/scoring";
 import { fmtFollowup, fmtShortDate } from "@/lib/dates";
@@ -15,6 +15,39 @@ function initials(name: string): string {
 }
 
 const VALID_TYPES: AccountType[] = ["Brand", "Mall", "Store"];
+
+// Who an account or location can be given to: reps, and managers who sell.
+// onChange gets null for "Unassigned", undefined for the "Choose…" placeholder.
+function OwnerSelect({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (repId: string | null | undefined) => void;
+  placeholder?: string;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => {
+        const v = e.target.value;
+        onChange(v === "__choose" ? undefined : v || null);
+      }}
+      className="px-2.5 py-1.5 rounded-md text-[13px] border"
+      style={{ borderColor: "var(--grid)", background: "var(--surface)", color: "var(--ink)" }}
+    >
+      {placeholder && <option value="__choose">{placeholder}</option>}
+      <option value="">Unassigned</option>
+      {assignableList().map((r) => (
+        <option key={r.id} value={r.id}>
+          {r.name}
+          {r.role === "Manager" ? " (manager)" : ""}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 export default function AccountDrawer({
   accountName,
@@ -32,6 +65,7 @@ export default function AccountDrawer({
   const isManager = useStore((s) => s.isManager());
   const currentUserId = useStore((s) => s.currentUserId);
   const assignAccount = useStore((s) => s.assignAccount);
+  const assignLocation = useStore((s) => s.assignLocation);
   const deleteAccount = useStore((s) => s.deleteAccount);
   const deleteLead = useStore((s) => s.deleteLead);
   const saveAccountEdit = useStore((s) => s.saveAccountEdit);
@@ -46,9 +80,10 @@ export default function AccountDrawer({
   if (!account) return null;
 
   const pending = pendingAccountRequestFor(account.name);
-  const canEdit = isManager || account.owner === currentUserId;
+  // A rep who owns any location of the account may ask for account-level edits.
+  const canEdit = isManager || account.owners.includes(currentUserId);
+  const multiCity = account.locations.length > 1;
   const stage = STAGES.find((s) => s.id === account.furthest);
-  const bucket = agingBucket(account.agingDays);
   const stageCounts: Record<string, number> = {};
   account.contacts.forEach((c) => {
     stageCounts[c.stage] = (stageCounts[c.stage] || 0) + 1;
@@ -150,46 +185,81 @@ export default function AccountDrawer({
           </div>
         </div>
 
-        {/* Owner */}
+        {/* Owner — one per location (city). An account in one city has one owner. */}
         <div className="mt-5">
           <p className="text-[10.5px] uppercase tracking-wide mb-2" style={{ color: "var(--muted)" }}>
-            Owner
-            {account.agingDays != null && ` · at ${stage?.name} for ${account.agingDays}d`}
+            {multiCity ? `Owners by location · ${account.locations.length} cities` : "Owner"}
+            {!multiCity && account.agingDays != null && ` · at ${stage?.name} for ${account.agingDays}d`}
           </p>
-          {isManager ? (
-            <select
-              value={account.owner || ""}
-              onChange={(e) => {
-                const repId = e.target.value || null;
-                assignAccount(account.name, repId);
-                showToast(repId ? `${account.name} assigned to ${repById(repId)?.name}` : `${account.name} unassigned`);
-              }}
-              className="px-2.5 py-1.5 rounded-md text-[13px] border"
-              style={{ borderColor: "var(--grid)", background: "var(--surface)", color: "var(--ink)" }}
-            >
-              <option value="">Unassigned</option>
-              {repsList().map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-          ) : account.owner ? (
-            <span className="flex items-center gap-1.5 text-[13px]" style={{ color: "var(--ink)" }}>
-              <span
-                className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-semibold"
-                style={{ background: repById(account.owner)?.color }}
-              >
-                {initials(repById(account.owner)?.name || "")}
-              </span>
-              {repById(account.owner)?.name}
-            </span>
-          ) : (
-            <span style={{ color: "var(--muted)" }}>Unassigned</span>
+
+          {multiCity && isManager && (
+            <div className="flex items-center gap-2 mb-2.5 text-[12px]" style={{ color: "var(--ink-2)" }}>
+              <span>Give all locations to</span>
+              <OwnerSelect
+                value="__choose"
+                placeholder="Choose…"
+                onChange={(repId) => {
+                  if (repId === undefined) return;
+                  assignAccount(account.name, repId);
+                  showToast(repId ? `All of ${account.name} assigned to ${repById(repId)?.name}` : `${account.name} unassigned`);
+                }}
+              />
+            </div>
           )}
-          {bucket && account.agingDays != null && account.agingDays >= AGING_MAX_DAYS && (
-            <p className="text-[11.5px] mt-1.5" style={{ color: "var(--crit)" }}>
-              Stuck at this stage for over 3 months — consider reassigning to another rep.
+
+          <div className={multiCity ? "flex flex-col gap-1.5" : ""}>
+            {account.locations.map((loc) => {
+              const locBucket = agingBucket(loc.agingDays);
+              const label = multiCity ? `${account.name} · ${loc.city}` : account.name;
+              return (
+                <div
+                  key={loc.key}
+                  className={multiCity ? "flex items-center gap-2 flex-wrap py-1.5 px-2 rounded-md border" : ""}
+                  style={multiCity ? { borderColor: "var(--grid)" } : undefined}
+                >
+                  {multiCity && (
+                    <span className="text-[12.5px] min-w-[120px]" style={{ color: "var(--ink)" }}>
+                      <b>{loc.city}</b>{" "}
+                      <span style={{ color: "var(--muted)" }}>
+                        · {loc.contacts.length} contact{loc.contacts.length === 1 ? "" : "s"}
+                        {loc.agingDays != null && ` · ${loc.agingDays}d at this stage`}
+                      </span>
+                    </span>
+                  )}
+                  {isManager ? (
+                    <OwnerSelect
+                      value={loc.owner || ""}
+                      onChange={(repId) => {
+                        if (repId === undefined) return;
+                        assignLocation(account.name, loc.key, repId);
+                        showToast(repId ? `${label} assigned to ${repById(repId)?.name}` : `${label} unassigned`);
+                      }}
+                    />
+                  ) : loc.owner ? (
+                    <span className="flex items-center gap-1.5 text-[13px]" style={{ color: "var(--ink)" }}>
+                      <span
+                        className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-semibold"
+                        style={{ background: repById(loc.owner)?.color }}
+                      >
+                        {initials(repById(loc.owner)?.name || "")}
+                      </span>
+                      {repById(loc.owner)?.name}
+                    </span>
+                  ) : (
+                    <span style={{ color: "var(--muted)" }}>Unassigned</span>
+                  )}
+                  {locBucket && loc.agingDays != null && loc.agingDays >= AGING_MAX_DAYS && (
+                    <p className="text-[11.5px] mt-1.5 w-full" style={{ color: "var(--crit)" }}>
+                      Stuck at this stage for over 3 months — consider reassigning {multiCity ? "this location" : "the account"}.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {multiCity && (
+            <p className="text-[11px] mt-1.5" style={{ color: "var(--muted)" }}>
+              Each city of {account.name} can have its own owner. A new city starts unassigned.
             </p>
           )}
         </div>

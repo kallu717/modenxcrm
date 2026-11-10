@@ -155,15 +155,29 @@ def test_stale_version_is_rejected(priya):
     assert r.status_code == 409 and r.json()["detail"]["code"] == "version_conflict"
 
 
-def test_manager_assigns_to_reps_only(meera, priya):
+def test_reps_and_managers_can_be_assigned_but_not_admins(meera, priya, asha):
     import_rows(meera, [ROW])
     lead, v = _lead_and_version(meera)
     pid = priya.get("/api/me").json()["id"]
     mid = meera.get("/api/me").json()["id"]
-    assert meera.put(f"/api/leads/{lead['id']}", json={"version": v, "lead": dict(lead, assignee=mid)}).status_code == 422
-    r = meera.put(f"/api/leads/{lead['id']}", json={"version": v, "lead": dict(lead, assignee=pid)})
+    aid = asha.get("/api/me").json()["id"]
+    # an Admin only administers
+    assert meera.put(f"/api/leads/{lead['id']}", json={"version": v, "lead": dict(lead, assignee=aid)}).status_code == 422
+    # a Manager who also sells can own accounts
+    r = meera.put(f"/api/leads/{lead['id']}", json={"version": v, "lead": dict(lead, assignee=mid)})
+    assert r.status_code == 200 and r.json()["lead"]["assignee"] == mid
+    r = meera.put(f"/api/leads/{lead['id']}", json={"version": v + 1, "lead": dict(lead, assignee=pid)})
     assert r.status_code == 200
     assert len(priya.get("/api/leads").json()) == 1   # now visible to the rep
+
+
+def test_the_import_account_is_not_on_the_team(meera):
+    from app.api import SERVICE_EMAIL, service_user
+    from app.db import SessionLocal
+    with SessionLocal() as db:
+        service_user(db)
+    emails = {u["email"] for u in meera.get("/api/users").json()}
+    assert SERVICE_EMAIL not in emails
 
 
 def test_database_enforces_unique_email_on_edit(meera):
@@ -310,13 +324,17 @@ def test_admin_emails_are_always_admin_and_locked(asha, monkeypatch):
     assert r.status_code == 409 and r.json()["detail"]["code"] == "set_by_server"
 
 
-def test_a_rep_with_leads_keeps_the_rep_role_until_they_are_reassigned(asha, priya):
+def test_rep_and_manager_keep_their_leads_but_an_admin_cannot_own_any(asha, priya):
     import_rows(priya, [ROW])
-    r = _set_role(asha, _id(priya), "Manager")
+    # rep -> manager keeps the leads: managers can own accounts
+    assert _set_role(asha, _id(priya), "Manager").status_code == 200
+    assert _set_role(asha, _id(priya), "Rep").status_code == 200
+    # but someone becoming an Admin hands their leads over first
+    r = _set_role(asha, _id(priya), "Admin")
     assert r.status_code == 409 and r.json()["detail"] == {"code": "has_leads", "count": 1}
     lead = asha.get("/api/leads").json()[0]
     asha.put(f"/api/leads/{lead['lead']['id']}", json={"version": lead["version"], "lead": dict(lead["lead"], assignee=None)})
-    assert _set_role(asha, _id(priya), "Manager").status_code == 200
+    assert _set_role(asha, _id(priya), "Admin").status_code == 200
 
 
 def test_unknown_role_or_user_is_refused(asha):

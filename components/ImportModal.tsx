@@ -223,8 +223,8 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
                 )}
                 {!isManager && (
                   <p className="text-[12px] mt-3" style={{ color: "var(--muted)" }}>
-                    New accounts go straight to you, no approval needed. A contact for an account someone else
-                    already owns stays with that rep — one account, one owner.
+                    New accounts and new cities go straight to you, no approval needed. A contact in a city
+                    someone else already owns at that account stays with them — one city, one owner.
                   </p>
                 )}
                 {!staged.rows.length && (

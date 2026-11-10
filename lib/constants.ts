@@ -1,4 +1,4 @@
-import type { Rep, StageDef } from "./types";
+import type { Lead, Rep, StageDef } from "./types";
 
 // The people who can sign in. Filled from the server's user list when the app
 // loads (lib/sync.ts); nobody is hard-coded here.
@@ -102,6 +102,19 @@ export const ACCOUNT_EDITABLE_FIELDS = [
 
 export function repsList(): Rep[] {
   return directory.filter((r) => r.role === "Rep");
+}
+
+// Who can be given accounts: reps, and managers who also sell. Admins only
+// administer. The server enforces the same rule.
+export function assignableList(): Rep[] {
+  return directory.filter((r) => r.role === "Rep" || r.role === "Manager");
+}
+
+// Whose selling shows in Reports and Revenue: every rep, plus any manager who
+// owns at least one account.
+export function sellersList(leads: Lead[]): Rep[] {
+  const owners = new Set(leads.map((l) => l.assignee).filter(Boolean));
+  return directory.filter((r) => r.role === "Rep" || (r.role === "Manager" && owners.has(r.id)));
 }
 
 export function repById(id: string | null): Rep | undefined {

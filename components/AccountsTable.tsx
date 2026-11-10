@@ -124,7 +124,30 @@ export default function AccountsTable({
                   </span>
                 </td>
                 <td className="py-2 px-2">
-                  {owner ? (
+                  {a.owners.length > 1 ? (
+                    // Split by city: different people own different locations.
+                    <span
+                      className="flex items-center gap-1.5"
+                      style={{ color: "var(--ink)" }}
+                      title={a.locations
+                        .map((l) => `${l.city}: ${repById(l.owner)?.name || "Unassigned"}`)
+                        .join("\n")}
+                    >
+                      <span className="flex -space-x-1">
+                        {a.owners.slice(0, 3).map((id) => (
+                          <span
+                            key={id}
+                            className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-semibold"
+                            style={{ background: repById(id)?.color, outline: "1.5px solid var(--surface)" }}
+                          >
+                            {initials(repById(id)?.name || "")}
+                          </span>
+                        ))}
+                      </span>
+                      {a.owners.length} owners
+                      <span style={{ color: "var(--muted)" }}>· {a.locations.length} cities</span>
+                    </span>
+                  ) : owner ? (
                     <span className="flex items-center gap-1.5" style={{ color: "var(--ink)" }}>
                       <span
                         className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-semibold"
@@ -133,9 +156,16 @@ export default function AccountsTable({
                         {initials(owner.name)}
                       </span>
                       {owner.name}
+                      {a.locations.length > 1 && (
+                        <span style={{ color: "var(--muted)" }}>
+                          · {a.locations.filter((l) => l.owner).length} of {a.locations.length} cities
+                        </span>
+                      )}
                     </span>
                   ) : (
-                    <span style={{ color: "var(--muted)", fontStyle: "italic" }}>Unassigned</span>
+                    <span style={{ color: "var(--muted)", fontStyle: "italic" }}>
+                      Unassigned{a.locations.length > 1 ? ` · ${a.locations.length} cities` : ""}
+                    </span>
                   )}
                 </td>
                 <td className="py-2 px-2">

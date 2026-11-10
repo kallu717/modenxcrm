@@ -50,7 +50,8 @@ Later: scheduled push, or move Lead Desk's data into this database.
 | D3 | Schema migrations | **Done:** Alembic scripts in `backend/app/migrations`, run at API start or as `python -m app.migrate`. | Dev |
 | D4 | Rep onboarding | Users are created at first sign-in. Alternative: devops or a manager pre-loads reps from the Entra group. Lean: keep first sign-in for the pilot. | Both |
 | D5 | Live updates | The page saves within about 2 seconds and re-reads every 30 seconds when idle. Real-time push is more work. Lean: not needed for the pilot. | Product |
-| D6 | Account as its own table | Today an account is the name shared by its contacts; the server now enforces one owner per account and no renaming onto another account's name. A table adds a place for account-level fields (owner, notes, billing) and a stable id. Lean: not for the pilot; add it with the first migration if account-level fields are needed. | Product |
+| D6 | Account as its own table | Today an account is the name shared by its contacts; the server enforces one owner per location (account + city, see D7) and no renaming onto another account's name. A table adds a place for account-level fields (owner, notes, billing) and a stable id. Lean: not for the pilot; add it with the first migration if account-level fields are needed. | Product |
+| D7 | Who owns what | **Decided (product owner, Nov 2026):** ownership is per location, where a location is the contacts' city within an account. Each city of an account (e.g. Reliance Retail · Bengaluru, · Mumbai) can have its own owner; an account in one city has one owner, as before. A new city under an assigned account starts unassigned, unless a rep adds the contact themselves. Reps **and Managers** can own locations (managers also sell); Admins cannot. Reports and Revenue count every rep plus any manager who owns accounts. | Product |
 
 ## Known gaps (not blockers for the plan, but real)
 

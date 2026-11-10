@@ -4,6 +4,7 @@ import { scoreLead, bandForScore } from "./scoring";
 import { PLANS, fmtInr, leadMrr } from "./revenue";
 import { STAGES, EDITABLE_FIELDS, ACCOUNT_EDITABLE_FIELDS, repById } from "./constants";
 import { newId } from "./ids";
+import { locationKey } from "./accounts";
 import type { ImportRow } from "./import";
 import type {
   ActivityEntry,
@@ -63,15 +64,47 @@ function matchExistingAccount(leads: Lead[], name: string): { account: string; t
   return hit ? { account: hit.account, type: hit.type } : null;
 }
 
+// Owners are per location (account + city). A contact joins whoever owns its
+// city at that account; a city with no owner yet starts unassigned for a
+// manager to hand out, unless a rep is adding the contact themselves.
+function locationOwner(leads: Lead[], accountName: string, city: string, exceptLeadId?: string): string | null {
+  const key = locationKey(city);
+  return (
+    leads.find(
+      (l) => l.id !== exceptLeadId && l.account === accountName && locationKey(l.city) === key && l.assignee
+    )?.assignee || null
+  );
+}
+
 function resolveNewContactOwner(
   leads: Lead[],
   accountName: string,
+  city: string,
   currentUserId: string,
   isManager: boolean
 ): { existingOwner: string | null; assignee: string | null } {
-  const existingOwner = leads.find((l) => l.account === accountName && l.assignee)?.assignee || null;
+  const existingOwner = locationOwner(leads, accountName, city);
   const assignee = existingOwner || (isManager ? null : currentUserId);
   return { existingOwner, assignee };
+}
+
+function ownedNote(account: string, city: string, ownerId: string): string {
+  const where = locationKey(city) ? `${account} · ${city}` : account;
+  return `${where} is already owned by ${repById(ownerId)?.name} — kept with them.`;
+}
+
+// After a contact's city changes it belongs to its new location: if someone
+// else already owns that city at this account, the contact moves to them.
+function followLocationOwner(leads: Lead[], before: Lead, after: Lead, by: string): Lead {
+  if (locationKey(before.city) === locationKey(after.city)) return after;
+  const owner = locationOwner(leads, after.account, after.city, after.id);
+  if (!owner || owner === after.assignee) return after;
+  return {
+    ...after,
+    assignee: owner,
+    ownerSince: isoToday(),
+    activity: [activityEntry(by, `Moved to ${after.city}, so now with ${repById(owner)?.name}, who owns that location.`), ...after.activity],
+  };
 }
 
 export interface NewLeadInput {
@@ -104,6 +137,7 @@ interface StoreState {
 
   // ---- assignment ----
   assignAccount: (accountName: string, repId: string | null) => void;
+  assignLocation: (accountName: string, cityKey: string, repId: string | null) => void;
 
   // ---- feedback ----
   toast: { id: number; msg: string } | null;
@@ -193,30 +227,40 @@ export const useStore = create<StoreState>((set, get) => ({
     return leads.some((l) => l.account === accountName && l.assignee === currentUserId);
   },
 
-  // 1 account : 1 rep. Every contact at an account moves together.
+  // 1 location : 1 owner. Every contact at a location (account + city) moves
+  // together. Handing over the whole account hands over each of its
+  // locations; for an account in a single city that's the same thing.
   assignAccount: (accountName, repId) => {
+    const keys = new Set(get().leads.filter((l) => l.account === accountName).map((l) => locationKey(l.city)));
+    keys.forEach((k) => get().assignLocation(accountName, k, repId));
+  },
+
+  assignLocation: (accountName, cityKey, repId) => {
     set((state) => {
-      const contacts = state.leads.filter((l) => l.account === accountName);
+      const contacts = state.leads.filter((l) => l.account === accountName && locationKey(l.city) === cityKey);
       if (!contacts.length) return state;
       const prevOwnerId = contacts.find((c) => c.assignee)?.assignee || null;
       const newRep = repId ? repById(repId) : undefined;
       const prevRep = prevOwnerId ? repById(prevOwnerId) : undefined;
       const ownerChanged = (repId || null) !== prevOwnerId;
       const me = state.currentUser();
+      const multiCity = new Set(state.leads.filter((l) => l.account === accountName).map((l) => locationKey(l.city))).size > 1;
+      const what = multiCity ? `${accountName} · ${cityKey ? contacts[0].city.trim() : "no city"}` : "Account";
       const txt = newRep
         ? prevRep
-          ? `Account reassigned from ${prevRep.name} to ${newRep.name} by ${me.name}.`
-          : `Account assigned to ${newRep.name} by ${me.name}.`
-        : `Account unassigned by ${me.name}.`;
+          ? `${what} reassigned from ${prevRep.name} to ${newRep.name} by ${me.name}.`
+          : `${what} assigned to ${newRep.name} by ${me.name}.`
+        : `${what} unassigned by ${me.name}.`;
+      const ids = new Set(contacts.map((c) => c.id));
       const leads = state.leads.map((l) => {
-        if (l.account !== accountName) return l;
+        if (!ids.has(l.id)) return l;
         return {
           ...l,
           assignee: repId || null,
-          // A genuinely new owner hasn't had a chance to work the account yet —
+          // A genuinely new owner hasn't had a chance to work the location yet —
           // the aging clock restarts so they aren't penalized for history before them.
           ownerSince: ownerChanged ? (repId ? isoToday() : null) : l.ownerSince,
-          activity: [activityEntry(me.name, txt), ...l.activity],
+          activity: ownerChanged ? [activityEntry(me.name, txt), ...l.activity] : l.activity,
         };
       });
       return { leads };
@@ -360,12 +404,13 @@ export const useStore = create<StoreState>((set, get) => ({
     const { existingOwner, assignee } = resolveNewContactOwner(
       state.leads,
       account,
+      input.city,
       state.currentUserId,
       state.isManager()
     );
     const noteBits = [`Added by ${me.name}.`];
     if (existingOwner && existingOwner !== state.currentUserId) {
-      noteBits.push(`Account already owned by ${repById(existingOwner)?.name} — kept with them.`);
+      noteBits.push(ownedNote(account, input.city, existingOwner));
     }
     if (input.notes) noteBits.push(`Note: ${input.notes}`);
 
@@ -424,13 +469,14 @@ export const useStore = create<StoreState>((set, get) => ({
       const { existingOwner, assignee } = resolveNewContactOwner(
         workingLeads,
         account,
+        r.city,
         state.currentUserId,
         state.isManager()
       );
       if (assignee === state.currentUserId && !state.isManager()) toOwnAccount++;
       const noteBits = [`Imported from ${sourceLabel} by ${me.name}.`];
       if (existingOwner && existingOwner !== state.currentUserId) {
-        noteBits.push(`Account already owned by ${repById(existingOwner)?.name} — kept with them.`);
+        noteBits.push(ownedNote(account, r.city, existingOwner));
       }
       if (r.notes) noteBits.push(`Note: ${r.notes}`);
       const emailQuality: EmailQuality = !r.email ? "none" : /^y/i.test(r.verified) ? "verified" : "catchall";
@@ -618,7 +664,7 @@ export const useStore = create<StoreState>((set, get) => ({
             .map((k) => EDITABLE_FIELDS.find((f) => f.key === k)?.label)
             .join(", ");
           updated.activity = [activityEntry(me.name, `${fields} updated.`), ...l.activity];
-          return updated;
+          return followLocationOwner(s.leads, l, updated, me.name);
         }),
       }));
     } else {
@@ -776,7 +822,7 @@ export const useStore = create<StoreState>((set, get) => ({
             });
           }
           updated.activity = [activityEntry(me.name, txt), ...l.activity];
-          return updated;
+          return followLocationOwner(s.leads, l, updated, me.name);
         }),
       }));
     }
