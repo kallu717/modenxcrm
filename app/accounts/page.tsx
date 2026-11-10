@@ -1,9 +1,13 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
-import { EMPTY_FILTERS, filterLeads, type FilterState } from "@/lib/filters";
+import { EMPTY_FILTERS, filterLeads, parseFilters, type FilterState } from "@/lib/filters";
+import { pageSlice } from "@/lib/paging";
+import { usePaging } from "@/lib/usePaging";
+import { useSessionState } from "@/lib/useSessionState";
+import Pager from "@/components/Pager";
 import { accountHref, buildAccounts } from "@/lib/accounts";
 import FilterBar from "@/components/FilterBar";
 import AccountsTable from "@/components/AccountsTable";
@@ -19,7 +23,13 @@ export default function AccountsPage({ searchParams }: PageProps<"/accounts">) {
     () => (isManager ? leads : leads.filter((l) => l.assignee === currentUserId)),
     [leads, isManager, currentUserId]
   );
-  const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
+  // Filters and page are remembered for the session, per person, so coming
+  // back from an account lands on the same view.
+  const [filters, setFilters] = useSessionState<FilterState>(
+    `modenx:${currentUserId}:accounts:filters`,
+    EMPTY_FILTERS,
+    parseFilters
+  );
 
   // Older links (/accounts?account=…) opened a side panel; each account now
   // has its own page.
@@ -37,6 +47,13 @@ export default function AccountsPage({ searchParams }: PageProps<"/accounts">) {
   );
   const accounts = useMemo(() => buildAccounts(filtered), [filtered]);
   const contactTotal = accounts.reduce((n, a) => n + a.contacts.length, 0);
+  const paging = usePaging(`modenx:${currentUserId}:accounts:paging`, accounts.length, JSON.stringify(filters));
+  const shown = useMemo(() => pageSlice(accounts, paging.page, paging.size), [accounts, paging.page, paging.size]);
+  const listTop = useRef<HTMLDivElement>(null);
+  const goToPage = (p: number) => {
+    paging.setPage(p);
+    listTop.current?.scrollIntoView({ block: "start" });
+  };
 
   // On its way to an account page: don't build the whole list first.
   if (accountParam) {
@@ -67,7 +84,17 @@ export default function AccountsPage({ searchParams }: PageProps<"/accounts">) {
 
       <FilterBar value={filters} onChange={setFilters} cities={cities} />
 
-      <AccountsTable accounts={accounts} onOpen={(name) => router.push(accountHref(name))} />
+      <div ref={listTop} className="scroll-mt-24">
+        <AccountsTable accounts={shown} onOpen={(name) => router.push(accountHref(name))} />
+      </div>
+      <Pager
+        page={paging.page}
+        size={paging.size}
+        total={accounts.length}
+        noun={["account", "accounts"]}
+        onPage={goToPage}
+        onSize={paging.setSize}
+      />
     </div>
   );
 }

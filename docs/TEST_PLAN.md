@@ -111,6 +111,25 @@ A location is a city within an account. One owner per location; an account in on
 | PAGE-20 | ✗ | Rep tries to rename | Goes for approval, nothing renamed yet | FE M-section, UI |
 | PAGE-21 | | Account names with `&`, spaces | Address works | FE PAGE5 |
 
+### 2.5 Pages on Leads and Accounts (PAGING)
+
+| ID | | Do | Expect | How |
+|---|---|---|---|---|
+| PAGING-01 | | Open Leads | 50 rows; "Showing 1–50 of 1,906 leads"; page buttons below | FE PAGING1–2, UI |
+| PAGING-02 | | Next, a page number, Prev | Right rows; list jumps back to its top | FE PAGING1, UI |
+| PAGING-03 | | Last page | Only the leftover rows; Next disabled | FE PAGING1, UI |
+| PAGING-04 | | Rows per page 25 / 100 | Page count changes; back to page 1 | FE PAGING3, UI |
+| PAGING-05 | | Change a filter on page 3 | Back to page 1 of the filtered list | UI |
+| PAGING-06 | | Open an account from Accounts page 3, then Back | Same page and filters | UI |
+| PAGING-07 | | Leave Leads with a filter, come back | Filter and page remembered (this browser tab only) | UI |
+| PAGING-08 | | Many pages | First, last, current ±1, "…" for gaps | FE PAGING9 |
+| PAGING-09 | ✗ | Page 0, a negative page, not a number | Page 1 | FE PAGING4 |
+| PAGING-10 | ✗ | Saved page is past the end (list shrank) | Last page, never an empty screen | FE PAGING5 |
+| PAGING-11 | ✗ | Saved page size not offered (7, 0, "big") | 50 a page | FE PAGING6, UI |
+| PAGING-12 | ✗ | Nothing matches the filter | "No leads"; no page buttons; no error | FE PAGING7 |
+| PAGING-13 | ✗ | Saved filters broken or tampered with | No filter applied; page still opens | FE PAGING12, UI |
+| PAGING-14 | ✗ | A second person signs in on the same browser | Doesn't see the first person's filters or page | UI |
+
 ## 3. Regression (REG): must keep working
 
 ### 3.1 Sign-in, roles, settings (AUTH)

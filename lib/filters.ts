@@ -72,3 +72,15 @@ export function filterLeads(leads: Lead[], f: FilterState): Lead[] {
     return true;
   });
 }
+
+// Filters saved for the session come back through here: only the known keys,
+// only text values; anything else is dropped and falls back to "no filter".
+export function parseFilters(raw: unknown): FilterState | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+  const out = { ...EMPTY_FILTERS };
+  (Object.keys(EMPTY_FILTERS) as (keyof FilterState)[]).forEach((k) => {
+    if (typeof r[k] === "string") (out as Record<string, string>)[k] = r[k] as string;
+  });
+  return out;
+}

@@ -1,17 +1,17 @@
 # Test report — 10 Nov 2026
 
 Branch `feature/location-assignment` (city ownership, managers as owners, merged
-city spellings, account page). Plan: [TEST_PLAN.md](TEST_PLAN.md), 115 planned
-cases, 51 of them negative.
+city spellings, account page, pages on Leads and Accounts). Plan:
+[TEST_PLAN.md](TEST_PLAN.md), 129 planned cases, 57 of them negative.
 
 ## Summary
 
 | Layer | Result | What it covers |
 |---|---|---|
-| Front-end tests (Vitest) | **147 / 147 pass** | Business rules behind every screen, incl. new LOC, ASG, CITY, PAGE, ROLE sections |
+| Front-end tests (Vitest) | **159 / 159 pass** | Business rules behind every screen, incl. new LOC, ASG, CITY, PAGE, ROLE, PAGING sections |
 | Server tests (pytest, real Postgres 16) | **60 / 60 pass** | API rules, permissions, sync, records, ingest, migrations |
 | Checks against a running server (`backend/scripts/qa_checks.py`) | **24 / 24 pass** (15 negative) | Sanity + new rules over real HTTP and sessions |
-| Screen checks in a browser (Chromium, dev sign-in, real Lead Desk data: 1,906 contacts, 502 accounts) | **42 / 42 pass** after 2 fixes | Every screen flow below |
+| Screen checks in a browser (Chromium, dev sign-in, real Lead Desk data: 1,906 contacts, 502 accounts) | **51 / 51 pass** after 2 fixes | Every screen flow below |
 | Type-check, lint, production build, production audit | Clean; 0 vulnerabilities | |
 
 Environment: Windows 11, Python 3.12, Node 24, Next.js 16.4.4, local Postgres 16,
@@ -31,11 +31,12 @@ RK), Asha (Admin), New Hire (Pending).
 
 | # | Finding | Why it matters | Suggestion |
 |---|---|---|---|
-| A | **Leads draws all 1,906 rows at once**: 4.7 s to open in development mode | Will get slower as data grows | Paging or "show more" on Leads |
+| A | ~~Leads draws all 1,906 rows at once: 4.7 s to open~~ **Fixed**: Leads and Accounts now show 50 rows a page; Leads opens in 0.9 s | — | — |
 | B | The app loads every visible lead at sign-in: 108 KB, ~1.8 s for 1,906 leads | Fine today; grows with data | Measure on a production build on the real server; load per page later if needed |
 | C | A rep who owns some cities of a multi-city account can ask to rename the **whole** account | Approval is still a manager's call, so it's safe | Confirm this is wanted, or limit account edits to managers for split accounts |
 | D | Reports' "stuck accounts" now lists every city (Reliance alone is 77 rows) | Long table | Group by account with a count, expand on click |
 | E | Speed numbers above are from development mode | Not representative | Run a timing pass on a production build (Phase 3) |
+| F | **Priority scoring barely recognises real job titles**: only 5 of 1,906 contacts are Hot (Lead Desk rates 687 as hot). The CRM scores titles by an exact list of 11 demo titles ("Leasing Head", "Founder"…); only 28 real contacts match, everyone else gets the lowest title score | Hot/Warm filters and "who to call first" are misleading on real data | Score titles by keywords (CEO, Director, Head, VP, Manager…), same rule on server and screens |
 
 ## Not tested (and why)
 
@@ -91,6 +92,15 @@ RK), Asha (Admin), New Hire (Pending).
 | UI-07 | Arjun requests leave; Meera approves | Approved; leave day for Arjun on 20 Nov saved |
 | UI-08 | Asha gives New Hire "Sales Rep" | Saved; New Hire signs in straight to Pipeline |
 | AUTH-07 ✗ | Asha's own row in Settings | Role picker locked, "That's you" |
+| PAGING-01 | Meera opens Leads | 50 rows, "Showing 1–50 of 1,906 leads", ‹ Prev 1 2 3 4 … 39 Next ›; opens in 0.9 s (was 4.7 s) |
+| PAGING-02 | Next, page 4, Prev | Right rows each time; list scrolled back to its top |
+| PAGING-03 | Page 39 | 6 rows (1,901–1,906); Next disabled |
+| PAGING-04 | Rows per page 100 on page 3 | 20 pages; back on page 1 |
+| PAGING-05 | City filter Bengaluru while on page 3 | Page 1 of the filtered list |
+| PAGING-06 | Accounts (502, 11 pages): page 3, open Godrej Capital, Back | Page 3 again, same filters |
+| PAGING-07 | Leads with a filter, go to Accounts, come back | Filter and page kept; clearing the filter goes to page 1 |
+| PAGING-13 ✗ | Saved filters and page overwritten with junk ("not json at all", size 7, page -4) | Page opened with no filter, 50 a page, page 1 |
+| PAGING-14 ✗ | Arjun signs in after Meera on the same browser | Arjun sees his own unfiltered page 1, not Meera's |
 
 ## Checks against a running server (API), all pass
 
@@ -124,7 +134,7 @@ SAN-07  after signing out, /api/me is refused
 ## How to run it again
 
 ```bash
-npm test                                         # front end, 147
+npm test                                         # front end, 159
 cd backend && pytest -q                          # server, 60 (needs Postgres)
 python scripts/qa_checks.py http://<server>      # running server, 24 (DEV_LOGIN on; never production)
 ```
