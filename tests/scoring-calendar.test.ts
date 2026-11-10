@@ -7,9 +7,9 @@ import type { CompanyHoliday, RepLeave } from "../lib/types";
 import { makeLead, resetStore, store, leadById } from "./helpers";
 
 describe("B. Priority scoring", () => {
-  it("B1 Bengaluru Leasing Head, verified, multi-source → 42 Hot", () => {
+  it("B1 Bengaluru Leasing Head, verified, multi-source → 32 Hot", () => {
     const r = scoreLead({ title: "Leasing Head", emailQuality: "verified", city: "Bengaluru", multiSource: true });
-    expect(r.score).toBe(42);
+    expect(r.score).toBe(32);
     expect(bandForScore(r.score)).toBe("Hot");
   });
 
@@ -35,10 +35,11 @@ describe("B. Priority scoring", () => {
     expect([30, 29, 20, 19, 12, 11].map(bandForScore)).toEqual(["Hot", "Warm", "Warm", "Nurture", "Nurture", "Low"]);
   });
 
-  it("B6 'bengaluru' and 'Bangalore' still count as the flagship city", () => {
-    for (const city of ["bengaluru", "Bangalore", " Bengaluru "]) {
+  it("B6 ✗ the city never changes the score: a lead anywhere in India counts the same", () => {
+    for (const city of ["Bengaluru", "Bangalore", "Mumbai", "Guwahati", "", "—"]) {
       const r = scoreLead({ title: "Founder", emailQuality: "none", city, multiSource: false });
-      expect(r.score, city).toBe(25);
+      expect(r.score, city).toBe(15);
+      expect(r.reasons.join(" "), city).not.toMatch(/city/i);
     }
   });
 

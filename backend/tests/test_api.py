@@ -36,8 +36,9 @@ def test_rep_import_assigns_to_the_rep_with_a_server_score(priya):
     me = priya.get("/api/me").json()
     assert lead["assignee"] == me["id"]
     assert lead["id"].startswith("L")
-    # Marketing Head 15 + verified 12 + Bengaluru 10 = 37 -> Hot
-    assert lead["score"] == 37 and lead["priorityAuto"] == "Hot"
+    # Marketing Head 15 + verified 12 = 27 -> Warm (the city adds nothing)
+    assert lead["score"] == 27 and lead["priorityAuto"] == "Warm"
+    assert not any("city" in r for r in lead["scoreReasons"])
 
 
 def test_manager_import_stays_unassigned(meera):
@@ -143,7 +144,7 @@ def test_rep_cannot_reassign_or_forge_a_score(priya, arjun):
     forged = dict(lead, score=999, priorityAuto="Hot", priorityOverride="Low")
     r = priya.put(f"/api/leads/{lead['id']}", json={"version": v, "lead": forged})
     assert r.status_code == 200
-    assert r.json()["lead"]["score"] == 37          # recomputed, forged value ignored
+    assert r.json()["lead"]["score"] == 27          # recomputed, forged value ignored
     assert r.json()["lead"]["priorityOverride"] == "Low"  # a rep's own override is allowed
 
 

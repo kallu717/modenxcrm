@@ -41,7 +41,7 @@ def test_a_database_from_before_migrations_is_upgraded_in_place():
     upgrade()
     with engine.connect() as c:
         assert c.execute(text("SELECT count(*) FROM users")).scalar() == 1  # data kept
-        assert c.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0003"
+        assert c.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0004"
 
 
 def test_the_database_refuses_an_unknown_stage_or_role():
@@ -54,3 +54,25 @@ def test_the_database_refuses_an_unknown_stage_or_role():
             "INSERT INTO leads (id, account, stage, version, data, created_at, updated_at) "
             "VALUES ('L1', 'A', 'maybe', 1, '{}', now(), now())"
         ))
+
+
+def test_saved_scores_lose_the_old_bengaluru_bonus_once():
+    # Leads saved before the city bonus was removed carry +10 in their score.
+    empty_database()
+    command.upgrade(config(), "0003")
+    old = {"city": "Bengaluru", "score": 37, "priorityAuto": "Hot", "priorityOverride": "Hot",
+           "scoreReasons": ["Marketing Head (+15)", "verified email (+12)", "flagship city (+10)"]}
+    other = {"city": "Mumbai", "score": 27, "priorityAuto": "Warm", "scoreReasons": ["Marketing Head (+15)", "verified email (+12)"]}
+    with engine.begin() as c:
+        for lead_id, data in (("L1", old), ("L2", other)):
+            c.execute(text("INSERT INTO leads (id, account, stage, version, data, created_at, updated_at) "
+                           "VALUES (:id, 'A', 'new', 1, CAST(:d AS jsonb), now(), now())"),
+                      {"id": lead_id, "d": __import__("json").dumps(data)})
+    upgrade()
+    upgrade()  # running it again must not take another 10 off
+    with engine.connect() as c:
+        rows = dict(c.execute(text("SELECT id, data FROM leads")).fetchall())
+    assert rows["L1"]["score"] == 27 and rows["L1"]["priorityAuto"] == "Warm"
+    assert "flagship city (+10)" not in rows["L1"]["scoreReasons"]
+    assert rows["L1"]["priorityOverride"] == "Hot"          # a person's choice is kept
+    assert rows["L2"] == other                              # untouched

@@ -25,12 +25,12 @@ Run with `npm test`.
 
 | ID | Scenario | Expected |
 |---|---|---|
-| B1 | Bengaluru Leasing Head, verified email, found in 2 sources | 15+12+10+5 = 42 → Hot |
+| B1 | Bengaluru Leasing Head, verified email, found in 2 sources | 15+12+5 = 32 → Hot |
 | B2 | Mumbai Store Manager, no email | 5 → Low |
 | B3 | Chennai Category Manager, catch-all email | 10+4 = 14 → Nurture |
 | B4 | Unknown job title ("Intern") | Scores the default +5, reason shows "+5" |
 | B5 | Band edges: 30, 29, 20, 19, 12, 11 | Hot, Warm, Warm, Nurture, Nurture, Low |
-| B6 | Imported city written "bengaluru" or "Bangalore" | Still gets the +10 flagship bonus |
+| B6 ✗ | Same lead in Bengaluru, Bangalore, Mumbai, Guwahati or no city | Same score; no city bonus (removed Nov 2026: leads anywhere in India count) |
 | B7 | Rep overrides Nurture to Hot, then picks the auto band again | Override set, then cleared back to auto |
 
 ## C. Working days (call targets)

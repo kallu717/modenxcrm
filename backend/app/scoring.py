@@ -1,6 +1,7 @@
 """Priority scoring. Mirrors the rules the UI always showed (seniority of the
-job function, email quality, flagship city, multi-source) — now computed on
-the server so a client can't hand-edit its own score."""
+job function, email quality, multi-source) — now computed on the server so a
+client can't hand-edit its own score. Location doesn't count: a lead from
+anywhere in India can be a good fit (product decision, Nov 2026)."""
 
 FN_TIER = {
     "Founder": 15, "Owner": 15, "Centre Director": 15, "Leasing Head": 15, "Marketing Head": 15,
@@ -22,9 +23,6 @@ def score_lead(lead: dict) -> tuple[int, list[str]]:
     elif quality == "catchall":
         score += 4
         reasons.append("catch-all email (+4)")
-    if lead.get("city") == "Bengaluru":
-        score += 10
-        reasons.append("flagship city (+10)")
     if lead.get("multiSource"):
         score += 5
         reasons.append("multi-source (+5)")
