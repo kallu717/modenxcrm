@@ -4,7 +4,7 @@ import { scoreLead, bandForScore } from "./scoring";
 import { PLANS, fmtInr, leadMrr } from "./revenue";
 import { STAGES, EDITABLE_FIELDS, ACCOUNT_EDITABLE_FIELDS, repById } from "./constants";
 import { newId } from "./ids";
-import { locationKey } from "./accounts";
+import { cityLabel, locationKey } from "./accounts";
 import type { ImportRow } from "./import";
 import type {
   ActivityEntry,
@@ -245,7 +245,7 @@ export const useStore = create<StoreState>((set, get) => ({
       const ownerChanged = (repId || null) !== prevOwnerId;
       const me = state.currentUser();
       const multiCity = new Set(state.leads.filter((l) => l.account === accountName).map((l) => locationKey(l.city))).size > 1;
-      const what = multiCity ? `${accountName} · ${cityKey ? contacts[0].city.trim() : "no city"}` : "Account";
+      const what = multiCity ? `${accountName} · ${cityKey ? cityLabel(contacts[0].city) : "no city"}` : "Account";
       const txt = newRep
         ? prevRep
           ? `${what} reassigned from ${prevRep.name} to ${newRep.name} by ${me.name}.`

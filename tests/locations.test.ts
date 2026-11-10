@@ -114,3 +114,29 @@ describe("M. Who can own accounts, and whose selling is reported", () => {
     expect(store().leads.filter((l) => l.assignee === store().currentUserId)).toHaveLength(1);
   });
 });
+
+describe("N. One city, many spellings", () => {
+  it("N1 Gurgaon and Gurugram (and old names like Bangalore) are one location, shown under the standard name", () => {
+    const g1 = makeLead({ account: "DLF", city: "Gurgaon", assignee: null, ownerSince: null });
+    const g2 = makeLead({ account: "DLF", city: "Gurugram", assignee: null, ownerSince: null });
+    const b = makeLead({ account: "DLF", city: "Bangalore", assignee: null, ownerSince: null });
+    const locs = buildLocations([g1, g2, b]);
+    expect(locs.map((l) => [l.city, l.contacts.length])).toEqual([
+      ["Gurugram", 2],
+      ["Bengaluru", 1],
+    ]);
+    expect(locationKey("Pimpri Chinchwad")).toBe(locationKey("Pimpri-Chinchwad"));
+    expect(locationKey("Mumbai")).not.toBe(locationKey("Navi Mumbai"));
+  });
+
+  it("N2 a contact typed as Gurgaon joins whoever owns Gurugram", () => {
+    const owned = makeLead({ account: "DLF", city: "Gurugram", assignee: "arjun" });
+    resetStore([owned], "priya");
+    const l = store().createLead({
+      name: "New", title: "Founder", account: "DLF", type: "Brand", email: "n@dlf.com",
+      phone: "", city: "Gurgaon", verified: false,
+    })!;
+    expect(l.assignee).toBe("arjun");
+    expect(l.activity[0].txt).toContain("DLF · Gurgaon is already owned by Arjun Mehta");
+  });
+});

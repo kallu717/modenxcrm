@@ -174,3 +174,35 @@ def test_approval_lands_together_with_the_edit(priya, meera):
 
 def test_sync_needs_the_csrf_header(priya):
     assert priya.post("/api/sync", json={}, headers={"X-Requested-With": ""}).status_code == 403
+
+
+def test_different_spellings_of_one_city_are_one_location(meera, priya, arjun):
+    gurgaon = dict(ROW, name="G1", email="g1@studioweft.com", city="Gurgaon")
+    gurugram = dict(ROW, name="G2", email="g2@studioweft.com", city="Gurugram")
+    import_rows(meera, [gurgaon, gurugram])
+    rows = _all(meera)
+    r = meera.post("/api/sync", json={"leads": [_put(rows["g1@studioweft.com"], assignee=_uid(priya)),
+                                                 _put(rows["g2@studioweft.com"], assignee=_uid(arjun))]})
+    assert r.status_code == 409 and r.json()["detail"]["city"] == "gurugram"
+    # and a new Gurgaon contact joins whoever owns Gurugram
+    meera.post("/api/sync", json={"leads": [_put(rows["g2@studioweft.com"], assignee=_uid(priya))]})
+    import_rows(meera, [dict(ROW, name="G3", email="g3@studioweft.com", city="gurgaon")])
+    assert _all(meera)["g3@studioweft.com"]["lead"]["assignee"] == _uid(priya)
+
+
+def test_location_key_handles_spellings_spacing_and_hyphens():
+    from app.api import location_key
+    assert location_key("Gurgaon") == location_key(" gurugram ") == "gurugram"
+    assert location_key("Bangalore") == location_key("Bengaluru")
+    assert location_key("Pimpri Chinchwad") == location_key("Pimpri-Chinchwad")
+    assert location_key("New  Delhi") == location_key("new delhi")
+    assert location_key("—") == location_key("") == location_key(None) == location_key("-") == ""
+    assert location_key("Mumbai") != location_key("Navi Mumbai")   # different places stay apart
+
+
+def test_server_and_screens_share_the_same_city_list():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    server = (root / "backend" / "app" / "city_aliases.json").read_text(encoding="utf-8")
+    screens = (root / "lib" / "city-aliases.json").read_text(encoding="utf-8")
+    assert server == screens, "backend/app/city_aliases.json and lib/city-aliases.json must be identical"

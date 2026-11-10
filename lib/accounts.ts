@@ -1,3 +1,4 @@
+import cityAliases from "./city-aliases.json";
 import { effectivePriority, isClosedStage } from "./scoring";
 import { followupBucket } from "./dates";
 import { accountAgingDays, needsRevenueDetails } from "./revenue";
@@ -17,10 +18,30 @@ export const PRIORITY_ORDER: Priority[] = ["Hot", "Warm", "Nurture", "Low"];
 // An account is split into locations by its contacts' city; each location
 // has its own owner. An account in one city is simply one location, so
 // handing over "the account" and handing over "its only location" are the
-// same thing. Blank and "—" count as one location of their own.
+// same thing. Case, extra spaces and hyphens don't matter, and different
+// spellings or old names of one city (Gurgaon/Gurugram, Bangalore/Bengaluru —
+// city-aliases.json, shared with the server) are the same location. Blank and
+// "—" count as one location of their own.
+const CITY_ALIASES: Record<string, string> = Object.fromEntries(
+  Object.entries(cityAliases).filter(([k]) => !k.startsWith("_"))
+);
+
+function normalizeCity(city: string | null | undefined): string {
+  return (city || "").toLowerCase().replace(/[\s\-_.,]+/g, " ").trim();
+}
+
 export function locationKey(city: string | null | undefined): string {
-  const c = (city || "").trim().toLowerCase();
-  return c === "" || c === "—" || c === "-" ? "" : c;
+  const c = normalizeCity(city);
+  if (c === "" || c === "—") return "";
+  return (CITY_ALIASES[c] || c).toLowerCase();
+}
+
+// The name a location is shown under: the standard name when the city has
+// one in the list, otherwise as typed.
+export function cityLabel(city: string | null | undefined): string {
+  const key = locationKey(city);
+  if (!key) return "No city";
+  return CITY_ALIASES[normalizeCity(city)] || (city || "").trim();
 }
 
 export interface LocationSummary {
@@ -43,7 +64,7 @@ export function buildLocations(contacts: Lead[]): LocationSummary[] {
       const furthest = STAGE_PROGRESS.find((s) => group.some((c) => c.stage === s)) || "new";
       return {
         key,
-        city: key ? group.find((c) => locationKey(c.city) === key)!.city.trim() : "No city",
+        city: cityLabel(group[0].city),
         contacts: group,
         owner: group.find((c) => c.assignee)?.assignee || null,
         furthest,

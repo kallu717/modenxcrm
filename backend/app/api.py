@@ -6,6 +6,7 @@ from contextlib import contextmanager
 import json
 import re
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -51,11 +52,22 @@ def is_manager(user: User) -> bool:
 ASSIGNABLE_ROLES = ("Rep", "Manager")
 
 
+CITY_ALIASES = {
+    k: v.lower()
+    for k, v in json.loads((Path(__file__).parent / "city_aliases.json").read_text(encoding="utf-8")).items()
+    if not k.startswith("_")
+}
+
+
 def location_key(city) -> str:
-    """An account is split into locations by its contacts' city. Blank and
-    "—" (no city given) count as one location of their own."""
-    c = (city or "").strip().lower()
-    return "" if c in ("", "—", "-") else c
+    """An account is split into locations by its contacts' city. Case, extra
+    spaces and hyphens don't matter, and different spellings or old names of
+    one city (Gurgaon/Gurugram, Bangalore/Bengaluru — city_aliases.json) are
+    the same location. Blank and "—" (no city given) count as one location."""
+    c = re.sub(r"[\s\-_.,]+", " ", (city or "").lower()).strip()
+    if c in ("", "—"):
+        return ""
+    return CITY_ALIASES.get(c, c)
 
 
 def user_out(u: User) -> dict:
