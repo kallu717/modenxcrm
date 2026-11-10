@@ -196,6 +196,30 @@ A location is a city within an account. One owner per location; an account in on
 | MISC-02 | ✗ | Same contact in Bengaluru, Mumbai, or no city | Same score; no city bonus | FE B6 |
 | MISC-03 | | Server upgrade on existing data | The old +10 comes off once; manual priorities kept | BE `test_saved_scores_lose_the_old_bengaluru_bonus_once` |
 
+### 2.11 Your own dashboard (WIDGET)
+
+| ID | | Do | Expect | How |
+|---|---|---|---|---|
+| WIDGET-01 | | First visit, nothing saved | The role's default widgets (rep, manager and admin each differ) | FE WIDGET1, WIDGET3, UI |
+| WIDGET-02 | | Edit dashboard | Toolbar: Add widget, Reset to default, Cancel, Done; each widget gets ⠿, ← →, ✕ and a resize corner | UI |
+| WIDGET-03 | | Drag a widget onto another | It moves there | UI |
+| WIDGET-04 | | Pull the corner, or use the arrow keys on it | Width and height change on the grid, never below the widget's minimum or past 12 columns | FE WIDGET5, UI |
+| WIDGET-05 | | ← → and ✕ | Moves and removes | FE WIDGET5, UI |
+| WIDGET-06 | | Add widget | Gallery grouped My work / My numbers / Team / Admin, only the role's widgets; ones already shown marked | FE WIDGET2, UI |
+| WIDGET-07 | | Done, then reload or sign in elsewhere | Same layout (saved on the server, per person) | FE WIDGET8, BE `test_rep_saves_their_own_layout_in_order`, UI |
+| WIDGET-08 | | Cancel | Changes thrown away | UI |
+| WIDGET-09 | | Reset to default | The role's default layout | UI |
+| WIDGET-10 | | Every widget in the gallery | Renders with real data, no errors | UI |
+| WIDGET-11 | | Data behind the new widgets | Pipeline by stage, won this month, this week, no next step, recently assigned, activity, days off, leaderboard, revenue by month, missing plan, roster | FE WIDGET10–16 |
+| WIDGET-12 | ✗ | Rep saves a team or admin widget (bypassing the screen) | Refused (403) | BE `test_rep_cannot_add_manager_or_admin_widgets`, UI |
+| WIDGET-13 | ✗ | Manager adds an admin widget; admin adds a selling widget | Refused (403) | BE `test_manager_can_add_team_widgets_but_not_admin_ones`, `test_admin_cannot_add_selling_widgets` |
+| WIDGET-14 | ✗ | Change someone else's dashboard | Refused (403) | BE `test_nobody_can_change_someone_elses_dashboard`, UI |
+| WIDGET-15 | ✗ | Unknown widget, a widget twice, too small/big, not a number, too many | Refused (422) | BE `test_bad_layouts_are_refused` |
+| WIDGET-16 | ✗ | Saved layout tampered with, or role changed since | Bad entries dropped, sizes pulled into range | FE WIDGET4 |
+| WIDGET-17 | ✗ | Add a widget twice or one not for your role (screen) | Nothing added | FE WIDGET7 |
+| WIDGET-18 | | Phone width | One full-width column, no sideways scroll | UI |
+| WIDGET-19 | | Server and screens agree on the widget list | Files identical | FE WIDGET9, BE `test_server_and_screens_share_the_same_widget_list` |
+
 ## 3. Regression (REG): must keep working
 
 ### 3.1 Sign-in, roles, settings (AUTH)

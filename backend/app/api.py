@@ -93,6 +93,37 @@ def has_markup(value) -> bool:
     return False
 
 
+DASHBOARD = json.loads((Path(__file__).parent / "dashboard_widgets.json").read_text(encoding="utf-8"))
+
+
+def clean_dashboard(user: User, data: dict) -> dict:
+    """A person's dashboard layout: an ordered list of widgets and their sizes.
+    Only widgets their role may see, each once, within the grid's bounds."""
+    widgets = data.get("widgets")
+    if not isinstance(widgets, list) or len(widgets) > DASHBOARD["maxWidgets"]:
+        raise HTTPException(422, "widgets must be a list")
+    seen: set[str] = set()
+    out = []
+    for w in widgets:
+        if not isinstance(w, dict):
+            raise HTTPException(422, "each widget needs id, w and h")
+        wid, width, height = w.get("id"), w.get("w"), w.get("h")
+        spec = DASHBOARD["widgets"].get(wid) if isinstance(wid, str) else None
+        if spec is None:
+            raise HTTPException(422, f"unknown widget {wid!r}")
+        if user.role not in spec["roles"]:
+            raise HTTPException(403, f"the {wid} widget isn't available to your role")
+        if wid in seen:
+            raise HTTPException(422, f"widget {wid} appears twice")
+        if not (isinstance(width, int) and isinstance(height, int)) or isinstance(width, bool) or isinstance(height, bool):
+            raise HTTPException(422, "widget sizes must be whole numbers")
+        if not (spec["minW"] <= width <= DASHBOARD["columns"] and spec["minH"] <= height <= DASHBOARD["maxRows"]):
+            raise HTTPException(422, f"widget {wid} is too small or too big")
+        seen.add(wid)
+        out.append({"id": wid, "w": width, "h": height})
+    return {"widgets": out}
+
+
 def is_iso_date(value) -> bool:
     if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
         return False
@@ -564,6 +595,15 @@ def authorize_write(db: Session, user: User, kind: str, rid: str, existing: Reco
         if lead is None or (not mgr and lead.assignee_id != user.id):
             raise HTTPException(403, "that lead is not assigned to you")
         return lead.assignee_id
+
+    if kind == "dashboard":
+        # Everyone keeps their own layout, managers included.
+        if rid != str(user.id):
+            raise HTTPException(403, "you can only change your own dashboard")
+        cleaned = clean_dashboard(user, data)
+        data.clear()
+        data.update(cleaned)
+        return user.id
 
     if kind == "payment":
         # One record per monthly debit, id "<lead id>@<billing date>". Who

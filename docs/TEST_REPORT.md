@@ -2,17 +2,17 @@
 
 Branch `feature/location-assignment` (city ownership, managers as owners, merged
 city spellings, account page, pages on Leads and Accounts, Dashboard, Mark paid,
-themes, bulk account actions, new name). Plan: [TEST_PLAN.md](TEST_PLAN.md), 170 planned cases,
-72 of them negative.
+themes, bulk account actions, new name, logo, your own dashboard). Plan:
+[TEST_PLAN.md](TEST_PLAN.md), 189 planned cases, 78 of them negative.
 
 ## Summary
 
 | Layer | Result | What it covers |
 |---|---|---|
-| Front-end tests (Vitest) | **188 / 188 pass** | Business rules behind every screen, incl. new LOC, ASG, CITY, PAGE, ROLE, PAGING, DASH, PAID, THEME, BULK sections |
-| Server tests (pytest, real Postgres 16) | **67 / 67 pass** | API rules, permissions, sync, records, ingest, migrations |
+| Front-end tests (Vitest) | **204 / 204 pass** | Business rules behind every screen, incl. new LOC, ASG, CITY, PAGE, ROLE, PAGING, DASH, PAID, THEME, BULK, WIDGET sections |
+| Server tests (pytest, real Postgres 16) | **77 / 77 pass** | API rules, permissions, sync, records, ingest, migrations |
 | Checks against a running server (`backend/scripts/qa_checks.py`) | **24 / 24 pass** (15 negative) | Sanity + new rules over real HTTP and sessions |
-| Screen checks in a browser (Chromium, dev sign-in, real Lead Desk data: 1,906 contacts, 502 accounts) | **68 / 68 pass** after 2 fixes | Every screen flow below |
+| Screen checks in a browser (Chromium, dev sign-in, real Lead Desk data: 1,906 contacts, 502 accounts) | **79 / 79 pass** after 2 fixes | Every screen flow below |
 | Type-check, lint, production build, production audit | Clean; 0 vulnerabilities | |
 
 Environment: Windows 11, Python 3.12, Node 24, Next.js 16.4.4, local Postgres 16,
@@ -119,6 +119,17 @@ RK), Asha (Admin), New Hire (Pending).
 | BULK-03/04 ✗ | Assign disabled until a person chosen; then Kreedo + LetsTransport to Arjun | Both saved on the server as Arjun's |
 | BULK-09 ✗ | Delete Lotus Mall, Cancel | All 4 contacts still there |
 | BULK-10 ✗ | Arjun on Accounts | No tick boxes |
+| WIDGET-01 | Meera, Arjun, Asha with nothing saved | Manager 11 widgets (selling + team); rep 8 (no team); admin 6 (team + access + roster) |
+| WIDGET-02/04 | Meera: Edit; Follow-ups wider ×2 and taller by keyboard; Payments corner dragged left | Follow-ups 6×5 → 8×6; Payments stopped at its 5-column minimum |
+| WIDGET-05 | Move "Stuck" earlier; remove "Hot" | Done |
+| WIDGET-06 | Gallery as Meera | My work, My numbers, Team; 15 to add, 10 marked "On your dashboard" |
+| WIDGET-07 | Add Leaderboard and Revenue, Done, reload | Both on top; server record holds all 12 in order with sizes; same after reload |
+| WIDGET-03 | Drag Approvals onto Revenue | Approvals now first |
+| WIDGET-10 | Add every remaining widget (25 in all) | All rendered, no console errors |
+| WIDGET-08 | Cancel | Back to the saved 12 |
+| WIDGET-12 ✗ | Arjun saves "Team today" straight to the server | 403; his gallery shows only My work and My numbers |
+| WIDGET-14 ✗ | Arjun saves Meera's dashboard | 403 |
+| WIDGET-18 | Phone width | Every widget full width, no sideways scroll |
 
 ## Checks against a running server (API), all pass
 
@@ -152,7 +163,7 @@ SAN-07  after signing out, /api/me is refused
 ## How to run it again
 
 ```bash
-npm test                                         # front end, 188
+npm test                                         # front end, 204
 cd backend && pytest -q                          # server, 60 (needs Postgres)
 python scripts/qa_checks.py http://<server>      # running server, 24 (DEV_LOGIN on; never production)
 ```

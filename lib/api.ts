@@ -34,7 +34,8 @@ export type RecordKind =
   | "holiday"
   | "payment_reminder"
   | "target"
-  | "payment";
+  | "payment"
+  | "dashboard";
 
 export interface Bootstrap {
   me: ServerUser;

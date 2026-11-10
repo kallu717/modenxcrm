@@ -236,3 +236,24 @@ export function agingBucket(days: number | null): { label: string; cls: string }
   if (days >= 30) return { label: "30–59 days", cls: "caution" };
   return { label: "0–29 days", cls: "ok" };
 }
+
+// What won deals billed in each of the last `months` calendar months
+// (this month included), oldest first.
+export function revenueByMonth(leads: Lead[], months = 6): { month: string; label: string; amount: number }[] {
+  const today = isoToday();
+  let y = Number(today.slice(0, 4));
+  let m = Number(today.slice(5, 7)) - 1;
+  const out: { month: string; label: string; amount: number }[] = [];
+  for (let i = 0; i < months; i++) {
+    const first = `${y}-${pad(m + 1)}-01`;
+    const last = `${y}-${pad(m + 1)}-${pad(new Date(y, m + 1, 0).getDate())}`;
+    const amount = leads.reduce((sum, l) => sum + leadMrr(l) * billingDatesBetween(l, first, last).length, 0);
+    out.unshift({ month: first.slice(0, 7), label: new Date(y, m, 1).toLocaleDateString("en-IN", { month: "short" }), amount });
+    m--;
+    if (m < 0) {
+      m = 11;
+      y--;
+    }
+  }
+  return out;
+}

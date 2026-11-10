@@ -6,6 +6,7 @@ import { STAGES, EDITABLE_FIELDS, ACCOUNT_EDITABLE_FIELDS, repById } from "./con
 import { newId } from "./ids";
 import { cityLabel, locationKey } from "./accounts";
 import type { ImportRow } from "./import";
+import type { SavedDashboard, WidgetPlacement } from "./widgets";
 import type {
   ActivityEntry,
   CompanyHoliday,
@@ -168,6 +169,10 @@ interface StoreState {
   logPaymentReminder: (leadId: string, billingDate: string) => void;
   payments: Record<string, PaymentRecord>;
   markPaid: (leadId: string, billingDate: string) => void;
+
+  // ---- dashboard layouts, one per person (by user id) ----
+  dashboards: Record<string, SavedDashboard>;
+  saveDashboard: (widgets: WidgetPlacement[]) => void;
   unmarkPaid: (paymentId: string) => void;
 
   // ---- targets (reports) ----
@@ -208,6 +213,7 @@ export const useStore = create<StoreState>((set, get) => ({
   changeRequests: [],
   paymentReminders: {},
   payments: {},
+  dashboards: {},
   targets: {},
 
   toast: null,
@@ -654,6 +660,12 @@ export const useStore = create<StoreState>((set, get) => ({
           : l
       ),
     }));
+  },
+
+  saveDashboard: (widgets) => {
+    const id = get().currentUserId;
+    if (!id) return;
+    set((s) => ({ dashboards: { ...s.dashboards, [id]: { widgets: widgets.map(({ id: w, w: width, h }) => ({ id: w, w: width, h })) } } }));
   },
 
   unmarkPaid: (id) => {

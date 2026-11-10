@@ -196,3 +196,114 @@ export function greeting(hour: number): string {
   if (hour < 17) return "Good afternoon";
   return "Good evening";
 }
+
+// ---------------------------------------------------------------- more widgets
+
+export const RECENT_ASSIGN_DAYS = 14;
+
+// Open contacts per stage (closed ones are counted under their own stage too).
+export function pipelineByStage(leads: Lead[]): { stage: Lead["stage"]; count: number }[] {
+  const order: Lead["stage"][] = ["new", "contacted", "qualified", "proposal", "won", "lost", "unqualified"];
+  return order.map((stage) => ({ stage, count: leads.filter((l) => l.stage === stage).length }));
+}
+
+export function wonThisMonth(leads: Lead[]): Lead[] {
+  const month = isoToday().slice(0, 7);
+  return leads.filter((l) => l.stage === "won" && (l.wonAt || "").startsWith(month));
+}
+
+// Follow-ups due from tomorrow through the next 7 days.
+export function followupsThisWeek(leads: Lead[]): Lead[] {
+  const today = isoToday();
+  const to = isoPlusDays(today, 7);
+  return leads
+    .filter((l) => !isClosedStage(l.stage) && l.nextFollowup && l.nextFollowup > today && l.nextFollowup <= to)
+    .sort(byDate);
+}
+
+// Open contacts with no follow-up date at all, oldest owner first.
+export function noNextStep(leads: Lead[]): Lead[] {
+  return leads
+    .filter((l) => !isClosedStage(l.stage) && !l.nextFollowup)
+    .sort((a, b) => ((a.ownerSince || a.createdAt) < (b.ownerSince || b.createdAt) ? -1 : 1));
+}
+
+export function recentlyAssigned(leads: Lead[], days = RECENT_ASSIGN_DAYS): Lead[] {
+  const since = isoPlusDays(isoToday(), -days);
+  return leads
+    .filter((l) => l.ownerSince && l.ownerSince >= since)
+    .sort((a, b) => (a.ownerSince! > b.ownerSince! ? -1 : 1));
+}
+
+export interface ActivityItem {
+  lead: Lead;
+  txt: string;
+  date: string;
+  method: string | null;
+}
+
+// What this person logged, newest first (activity is stored newest first).
+export function myActivity(leads: Lead[], myName: string, limit = 20): ActivityItem[] {
+  return leads
+    .flatMap((lead) =>
+      lead.activity
+        .filter((a) => a.who === myName)
+        .map((a) => ({ lead, txt: a.txt, date: a.date, method: a.method }))
+    )
+    .sort((a, b) => (a.date > b.date ? -1 : a.date < b.date ? 1 : 0))
+    .slice(0, limit);
+}
+
+export interface DayOff {
+  date: string;
+  label: string;
+  repId: string | null; // null for a company holiday
+}
+
+// Company holidays and the given people's leave between two dates.
+export function daysOff(
+  holidays: CompanyHoliday[],
+  leaves: RepLeave[],
+  from: string,
+  to: string,
+  repIds: string[] | null
+): DayOff[] {
+  return [
+    ...holidays.filter((h) => h.date >= from && h.date <= to).map((h) => ({ date: h.date, label: h.name, repId: null })),
+    ...leaves
+      .filter((l) => l.date >= from && l.date <= to && (!repIds || repIds.includes(l.repId)))
+      .map((l) => ({ date: l.date, label: l.reason || "Leave", repId: l.repId })),
+  ].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
+export function monthBounds(): { from: string; to: string } {
+  const today = isoToday();
+  const [y, m] = [Number(today.slice(0, 4)), Number(today.slice(5, 7))];
+  return { from: today.slice(0, 8) + "01", to: today.slice(0, 8) + String(new Date(y, m, 0).getDate()).padStart(2, "0") };
+}
+
+export interface LeaderRow {
+  rep: Rep;
+  wins: number;
+  calls: number;
+}
+
+// This month: wins first, then calls.
+export function leaderboard(leads: Lead[], sellers: Rep[]): LeaderRow[] {
+  const range = monthBounds();
+  return sellers
+    .map((rep) => {
+      const s = computeRepStats(leads, rep.id, range);
+      return { rep, wins: s.onboardings, calls: s.calls };
+    })
+    .sort((a, b) => b.wins - a.wins || b.calls - a.calls || a.rep.name.localeCompare(b.rep.name));
+}
+
+// Won deals with no plan or start date: their revenue can't be counted yet.
+export function wonMissingPlan(leads: Lead[]): Lead[] {
+  return leads.filter((l) => l.stage === "won" && (!l.plan || !l.mandateDate));
+}
+
+export function rosterCounts(reps: Rep[]): { role: Rep["role"]; count: number }[] {
+  return (["Rep", "Manager", "Admin"] as const).map((role) => ({ role, count: reps.filter((r) => r.role === role).length }));
+}

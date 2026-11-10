@@ -100,6 +100,7 @@ describe("T. Loading from the server", () => {
         payment_reminder: [{ id: lead.id, data: { billingDate: "2026-10-01" } }],
         target: [{ id: "7", data: { callsPerDay: 10 } }],
         payment: [{ id: lead.id + "@2026-10-01", data: { leadId: lead.id, billingDate: "2026-10-01", amount: 3000 } }],
+        dashboard: [{ id: "7", data: { widgets: [{ id: "followups", w: 12, h: 5 }] } }],
       },
     };
     const f = fromServer(boot);
@@ -109,6 +110,7 @@ describe("T. Loading from the server", () => {
     expect(f.paymentReminders).toEqual({ [lead.id]: "2026-10-01" });
     expect(f.targets).toEqual({ "7": { callsPerDay: 10 } });
     expect(Object.keys(f.payments)).toEqual([lead.id + "@2026-10-01"]);
+    expect(f.dashboards["7"].widgets[0]).toEqual({ id: "followups", w: 12, h: 5 });
     expect(f.companyHolidays).toEqual([{ date: "2026-12-25", name: "Christmas" }]);
   });
 
