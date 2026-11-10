@@ -146,3 +146,54 @@ export function buildAccounts(leadPool: Lead[]): AccountSummary[] {
     })
     .sort((a, b) => b.contacts.length - a.contacts.length || a.name.localeCompare(b.name));
 }
+
+// ---------- the account page: who owns which city ----------
+
+export interface OwnerShare {
+  owner: string | null; // null = the unassigned cities
+  cities: number;
+  contacts: number;
+}
+
+// One entry per owner (most cities first), then the unassigned cities last.
+export function ownerSummary(locations: LocationSummary[]): OwnerShare[] {
+  const map = new Map<string | null, OwnerShare>();
+  locations.forEach((l) => {
+    const s = map.get(l.owner) || { owner: l.owner, cities: 0, contacts: 0 };
+    s.cities += 1;
+    s.contacts += l.contacts.length;
+    map.set(l.owner, s);
+  });
+  const owned = [...map.values()].filter((s) => s.owner).sort((a, b) => b.cities - a.cities || b.contacts - a.contacts);
+  const none = map.get(null);
+  return none ? [...owned, none] : owned;
+}
+
+export type LocationStatus = "all" | "unassigned" | "assigned";
+export type LocationSort = "contacts" | "city" | "days";
+
+export function filterLocations(
+  locations: LocationSummary[],
+  opts: { query?: string; status?: LocationStatus; owner?: string | null; sort?: LocationSort }
+): LocationSummary[] {
+  const q = (opts.query || "").trim().toLowerCase();
+  const rows = locations.filter((l) => {
+    if (q && !l.city.toLowerCase().includes(q)) return false;
+    if (opts.status === "unassigned" && l.owner) return false;
+    if (opts.status === "assigned" && !l.owner) return false;
+    if (opts.owner !== undefined && opts.owner !== null && l.owner !== opts.owner) return false;
+    return true;
+  });
+  const sort = opts.sort || "contacts";
+  return rows.sort((a, b) =>
+    sort === "city"
+      ? a.city.localeCompare(b.city)
+      : sort === "days"
+        ? (b.agingDays ?? -1) - (a.agingDays ?? -1) || a.city.localeCompare(b.city)
+        : b.contacts.length - a.contacts.length || a.city.localeCompare(b.city)
+  );
+}
+
+export function accountHref(name: string): string {
+  return `/accounts/view?name=${encodeURIComponent(name)}`;
+}

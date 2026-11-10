@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { useStore } from "../lib/store";
-import { buildAccounts, buildLocations, locationKey } from "../lib/accounts";
+import { accountHref, buildAccounts, buildLocations, filterLocations, locationKey, ownerSummary } from "../lib/accounts";
 import { assignableList, sellersList, setDirectory } from "../lib/constants";
 import { DEMO_REPS } from "../lib/seed";
 import { makeLead, resetStore, store, leadById } from "./helpers";
@@ -138,5 +138,52 @@ describe("N. One city, many spellings", () => {
     })!;
     expect(l.assignee).toBe("arjun");
     expect(l.activity[0].txt).toContain("DLF · Gurgaon is already owned by Arjun Mehta");
+  });
+});
+
+describe("O. The account page: who owns which city", () => {
+  const leads = [
+    makeLead({ account: "R", city: "Pune", assignee: "priya" }),
+    makeLead({ account: "R", city: "Pune", assignee: "priya" }),
+    makeLead({ account: "R", city: "Agra", assignee: "priya" }),
+    makeLead({ account: "R", city: "Mumbai", assignee: "arjun" }),
+    makeLead({ account: "R", city: "Nagpur", assignee: null, ownerSince: null }),
+    makeLead({ account: "R", city: "Bengaluru", assignee: null, ownerSince: null }),
+    makeLead({ account: "R", city: "Bengaluru", assignee: null, ownerSince: null }),
+    makeLead({ account: "R", city: "Bengaluru", assignee: null, ownerSince: null }),
+  ];
+  const locs = buildLocations(leads);
+
+  it("O1 owner chips: most cities first, unassigned last, with contact counts", () => {
+    expect(ownerSummary(locs)).toEqual([
+      { owner: "priya", cities: 2, contacts: 3 },
+      { owner: "arjun", cities: 1, contacts: 1 },
+      { owner: null, cities: 2, contacts: 4 },
+    ]);
+  });
+
+  it("O2 the table is biggest city first by default; city search ignores case", () => {
+    expect(filterLocations(locs, {}).map((l) => l.city)).toEqual(["Bengaluru", "Pune", "Agra", "Mumbai", "Nagpur"]);
+    expect(filterLocations(locs, { query: "PUN" }).map((l) => l.city)).toEqual(["Pune"]);
+    expect(filterLocations(locs, { query: "pu" }).map((l) => l.city)).toEqual(["Pune", "Nagpur"]);
+    expect(filterLocations(locs, { sort: "city" }).map((l) => l.city)).toEqual(["Agra", "Bengaluru", "Mumbai", "Nagpur", "Pune"]);
+  });
+
+  it("O3 'Unassigned', 'Assigned' and one owner's cities", () => {
+    expect(filterLocations(locs, { status: "unassigned" }).map((l) => l.city)).toEqual(["Bengaluru", "Nagpur"]);
+    expect(filterLocations(locs, { status: "assigned" })).toHaveLength(3);
+    expect(filterLocations(locs, { owner: "priya" }).map((l) => l.city)).toEqual(["Pune", "Agra"]);
+  });
+
+  it("O4 assigning several ticked cities at once gives each to that person", () => {
+    resetStore(leads.map((l) => ({ ...l })));
+    for (const key of ["bengaluru", "nagpur"]) store().assignLocation("R", key, "meera");
+    const acct = buildAccounts(store().leads).find((a) => a.name === "R")!;
+    expect(ownerSummary(acct.locations).find((s) => s.owner === "meera")).toEqual({ owner: "meera", cities: 2, contacts: 4 });
+    expect(acct.locations.every((l) => l.owner)).toBe(true);
+  });
+
+  it("O5 each account has its own page address, safe for any name", () => {
+    expect(accountHref("Marrow & Co")).toBe("/accounts/view?name=Marrow%20%26%20Co");
   });
 });

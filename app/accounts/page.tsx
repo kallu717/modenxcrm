@@ -1,17 +1,17 @@
 "use client";
 
-import { use, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { EMPTY_FILTERS, filterLeads, type FilterState } from "@/lib/filters";
-import { buildAccounts } from "@/lib/accounts";
+import { accountHref, buildAccounts } from "@/lib/accounts";
 import FilterBar from "@/components/FilterBar";
 import AccountsTable from "@/components/AccountsTable";
-import AccountDrawer from "@/components/AccountDrawer";
-import LeadDrawer from "@/components/LeadDrawer";
 
 export default function AccountsPage({ searchParams }: PageProps<"/accounts">) {
   const { account } = use(searchParams);
   const accountParam = typeof account === "string" ? account : null;
+  const router = useRouter();
   const leads = useStore((s) => s.leads);
   const isManager = useStore((s) => s.isManager());
   const currentUserId = useStore((s) => s.currentUserId);
@@ -20,15 +20,12 @@ export default function AccountsPage({ searchParams }: PageProps<"/accounts">) {
     [leads, isManager, currentUserId]
   );
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
-  const [openAccount, setOpenAccount] = useState<string | null>(accountParam);
 
-  // "manage in Accounts" links land here with the account to open.
-  const [seenParam, setSeenParam] = useState(accountParam);
-  if (accountParam !== seenParam) {
-    setSeenParam(accountParam);
-    if (accountParam) setOpenAccount(accountParam);
-  }
-  const [openLeadId, setOpenLeadId] = useState<string | null>(null);
+  // Older links (/accounts?account=…) opened a side panel; each account now
+  // has its own page.
+  useEffect(() => {
+    if (accountParam) router.replace(accountHref(accountParam));
+  }, [accountParam, router]);
 
   const cities = useMemo(
     () => Array.from(new Set(visibleLeads.map((l) => l.city))).sort(),
@@ -46,8 +43,8 @@ export default function AccountsPage({ searchParams }: PageProps<"/accounts">) {
             Accounts
           </h1>
           <p className="text-[12.5px] mt-0.5" style={{ color: "var(--muted)" }}>
-            One row per company, with every contact rolled up. Open an account to see its details
-            and who you know there.
+            One row per company, with every contact rolled up. Open an account to see who owns which
+            city, its contacts and its details.
           </p>
         </div>
         <div className="font-mono text-[12px]" style={{ color: "var(--muted)" }}>
@@ -58,18 +55,7 @@ export default function AccountsPage({ searchParams }: PageProps<"/accounts">) {
 
       <FilterBar value={filters} onChange={setFilters} cities={cities} />
 
-      <AccountsTable accounts={accounts} onOpen={setOpenAccount} />
-
-      {openAccount && (
-        <AccountDrawer
-          key={openAccount}
-          accountName={openAccount}
-          onClose={() => setOpenAccount(null)}
-          onOpenLead={(id) => setOpenLeadId(id)}
-          onRenamed={setOpenAccount}
-        />
-      )}
-      {openLeadId && <LeadDrawer leadId={openLeadId} onClose={() => setOpenLeadId(null)} />}
+      <AccountsTable accounts={accounts} onOpen={(name) => router.push(accountHref(name))} />
     </div>
   );
 }

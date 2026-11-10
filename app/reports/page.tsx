@@ -5,7 +5,8 @@ import { useStore } from "@/lib/store";
 import { STAGES, assignableList, sellersList } from "@/lib/constants";
 import { RANGE_PRESETS, rangeForPreset, workingRangeForRep } from "@/lib/calendar";
 import { computeRepStats, computeFunnel, computeStageAging } from "@/lib/reports";
-import { buildAccounts } from "@/lib/accounts";
+import Link from "next/link";
+import { accountHref, buildAccounts } from "@/lib/accounts";
 import { fmtShortDate } from "@/lib/dates";
 import { agingBucket, AGING_MAX_DAYS } from "@/lib/revenue";
 import type { DateRange } from "@/lib/types";
@@ -437,7 +438,11 @@ export default function ReportsPage() {
                 const stage = STAGES.find((s) => s.id === a.furthest);
                 return (
                   <tr key={a.key} style={{ borderBottom: "1px solid var(--grid)" }}>
-                    <td className="py-1.5 px-2" style={tdStyle}>{a.name}</td>
+                    <td className="py-1.5 px-2" style={tdStyle}>
+                      <Link href={accountHref(a.account)} className="hover:underline" style={{ color: "var(--ink)" }}>
+                        {a.name}
+                      </Link>
+                    </td>
                     <td className="py-1.5 px-2">
                       <select
                         aria-label={`Reassign ${a.name}`}
