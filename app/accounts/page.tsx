@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useRef } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { EMPTY_FILTERS, filterLeads, parseFilters, type FilterState } from "@/lib/filters";
@@ -11,6 +11,7 @@ import Pager from "@/components/Pager";
 import { accountHref, buildAccounts } from "@/lib/accounts";
 import FilterBar from "@/components/FilterBar";
 import AccountsTable from "@/components/AccountsTable";
+import AccountsBulkBar from "@/components/AccountsBulkBar";
 
 export default function AccountsPage({ searchParams }: PageProps<"/accounts">) {
   const { account } = use(searchParams);
@@ -50,6 +51,28 @@ export default function AccountsPage({ searchParams }: PageProps<"/accounts">) {
   const paging = usePaging(`modenx:${currentUserId}:accounts:paging`, accounts.length, JSON.stringify(filters));
   const shown = useMemo(() => pageSlice(accounts, paging.page, paging.size), [accounts, paging.page, paging.size]);
   const listTop = useRef<HTMLDivElement>(null);
+
+  // Ticked accounts, by name. Only ones still in the filtered list count, so
+  // changing a filter never acts on rows you can no longer see.
+  const [ticked, setTicked] = useState<Set<string>>(() => new Set());
+  const selectedAccounts = useMemo(() => accounts.filter((a) => ticked.has(a.name)), [accounts, ticked]);
+  const selection = {
+    selected: ticked,
+    toggle: (name: string) =>
+      setTicked((s) => {
+        const next = new Set(s);
+        if (next.has(name)) next.delete(name);
+        else next.add(name);
+        return next;
+      }),
+    toggleAll: (names: string[]) =>
+      setTicked((s) => {
+        const next = new Set(s);
+        const all = names.every((n) => next.has(n));
+        names.forEach((n) => (all ? next.delete(n) : next.add(n)));
+        return next;
+      }),
+  };
   const goToPage = (p: number) => {
     paging.setPage(p);
     listTop.current?.scrollIntoView({ block: "start" });
@@ -85,7 +108,11 @@ export default function AccountsPage({ searchParams }: PageProps<"/accounts">) {
       <FilterBar value={filters} onChange={setFilters} cities={cities} />
 
       <div ref={listTop} className="scroll-mt-24">
-        <AccountsTable accounts={shown} onOpen={(name) => router.push(accountHref(name))} />
+        <AccountsTable
+          accounts={shown}
+          onOpen={(name) => router.push(accountHref(name))}
+          selection={isManager ? selection : undefined}
+        />
       </div>
       <Pager
         page={paging.page}
@@ -95,6 +122,21 @@ export default function AccountsPage({ searchParams }: PageProps<"/accounts">) {
         onPage={goToPage}
         onSize={paging.setSize}
       />
+      {isManager && (
+        <>
+          {/* room so the floating bar never covers the page buttons */}
+          {selectedAccounts.length > 0 && <div className="h-24" />}
+          <AccountsBulkBar
+            selected={selectedAccounts}
+            onClear={() => setTicked(new Set())}
+            matchingCount={accounts.length}
+            canSelectAllMatching={
+              selectedAccounts.length < accounts.length && shown.every((a) => ticked.has(a.name))
+            }
+            onSelectAllMatching={() => setTicked(new Set(accounts.map((a) => a.name)))}
+          />
+        </>
+      )}
     </div>
   );
 }

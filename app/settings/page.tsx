@@ -143,7 +143,7 @@ export default function SettingsPage() {
         Settings
       </h1>
       <p className="text-[12.5px] mt-0.5 mb-4" style={{ color: "var(--muted)" }}>
-        Who can use ModenX Pipeline and what they can do. People appear here after they first sign in with Microsoft.
+        Who can use bdCRM for ModenX and what they can do. People appear here after they first sign in with Microsoft.
         A change applies straight away, without them signing out.
       </p>
 

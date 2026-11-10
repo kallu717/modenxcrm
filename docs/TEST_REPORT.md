@@ -1,17 +1,18 @@
 # Test report — 10 Nov 2026
 
 Branch `feature/location-assignment` (city ownership, managers as owners, merged
-city spellings, account page, pages on Leads and Accounts). Plan:
-[TEST_PLAN.md](TEST_PLAN.md), 129 planned cases, 57 of them negative.
+city spellings, account page, pages on Leads and Accounts, Dashboard, Mark paid,
+themes, bulk account actions, new name). Plan: [TEST_PLAN.md](TEST_PLAN.md), 170 planned cases,
+72 of them negative.
 
 ## Summary
 
 | Layer | Result | What it covers |
 |---|---|---|
-| Front-end tests (Vitest) | **159 / 159 pass** | Business rules behind every screen, incl. new LOC, ASG, CITY, PAGE, ROLE, PAGING sections |
-| Server tests (pytest, real Postgres 16) | **60 / 60 pass** | API rules, permissions, sync, records, ingest, migrations |
+| Front-end tests (Vitest) | **188 / 188 pass** | Business rules behind every screen, incl. new LOC, ASG, CITY, PAGE, ROLE, PAGING, DASH, PAID, THEME, BULK sections |
+| Server tests (pytest, real Postgres 16) | **67 / 67 pass** | API rules, permissions, sync, records, ingest, migrations |
 | Checks against a running server (`backend/scripts/qa_checks.py`) | **24 / 24 pass** (15 negative) | Sanity + new rules over real HTTP and sessions |
-| Screen checks in a browser (Chromium, dev sign-in, real Lead Desk data: 1,906 contacts, 502 accounts) | **51 / 51 pass** after 2 fixes | Every screen flow below |
+| Screen checks in a browser (Chromium, dev sign-in, real Lead Desk data: 1,906 contacts, 502 accounts) | **68 / 68 pass** after 2 fixes | Every screen flow below |
 | Type-check, lint, production build, production audit | Clean; 0 vulnerabilities | |
 
 Environment: Windows 11, Python 3.12, Node 24, Next.js 16.4.4, local Postgres 16,
@@ -36,7 +37,7 @@ RK), Asha (Admin), New Hire (Pending).
 | C | A rep who owns some cities of a multi-city account can ask to rename the **whole** account | Approval is still a manager's call, so it's safe | Confirm this is wanted, or limit account edits to managers for split accounts |
 | D | Reports' "stuck accounts" now lists every city (Reliance alone is 77 rows) | Long table | Group by account with a count, expand on click |
 | E | Speed numbers above are from development mode | Not representative | Run a timing pass on a production build (Phase 3) |
-| F | **Priority scoring barely recognises real job titles**: only 5 of 1,906 contacts are Hot (Lead Desk rates 687 as hot). The CRM scores titles by an exact list of 11 demo titles ("Leasing Head", "Founder"…); only 28 real contacts match, everyone else gets the lowest title score | Hot/Warm filters and "who to call first" are misleading on real data | Score titles by keywords (CEO, Director, Head, VP, Manager…), same rule on server and screens |
+| F | **Priority scoring barely recognises real job titles**: only 5 of 1,906 contacts were Hot, and **none** since the Bengaluru bonus was removed (Lead Desk rates 687 as hot). The CRM scores titles by an exact list of 11 demo titles ("Leasing Head", "Founder"…); only 28 real contacts match, everyone else gets the lowest title score | Hot/Warm filters and "who to call first" are misleading on real data | Score titles by keywords (CEO, Director, Head, VP, Manager…), same rule on server and screens |
 
 ## Not tested (and why)
 
@@ -101,6 +102,23 @@ RK), Asha (Admin), New Hire (Pending).
 | PAGING-07 | Leads with a filter, go to Accounts, come back | Filter and page kept; clearing the filter goes to page 1 |
 | PAGING-13 ✗ | Saved filters and page overwritten with junk ("not json at all", size 7, page -4) | Page opened with no filter, 50 a page, page 1 |
 | PAGING-14 ✗ | Arjun signs in after Meera on the same browser | Arjun sees his own unfiltered page 1, not Meera's |
+| DASH-01 | Open the site as Meera | Went to /dashboard; "Dashboard" first tab; tab title "bdCRM for ModenX" |
+| DASH-02/03 | Meera's day | Tiles 0 overdue · 1 today · 0 meetings · 0 payments · 0/8 calls; Aditi Toley listed for today with "Contacted" |
+| DASH-05 | Test meeting tomorrow 11:30 (Video) | "Tomorrow · 11:30 AM · Pankaj Singh · Reliance Retail · Video · Renewal check-in" |
+| DASH-10/11 | Your team | 650 cities with no owner (1,767 contacts), stuck 0, revenue Nov ₹3,000; team table for 4 sellers |
+| DASH-12 ✗ | Arjun's dashboard | Only his day (102 not contacted yet); no team section; no Reports tab |
+| DASH-13 | Asha (Admin) | Team section and "People waiting for access"; no personal tiles |
+| PAID-01 | Test deal started 8 Oct (Growth) | Listed "2d overdue · Sun, 8 Nov · ₹3,000", red |
+| PAID-02 | Log reminder | Row stayed, "Reminder sent" |
+| PAID-03 | Mark paid | Row gone; revenue tile "₹3,000 marked paid"; server record `L048@2026-11-08`, marked by Meera, paid on 10 Nov |
+| PAID-05 ✗ | Arjun sends a "paid" for Meera's account straight to the server | 403 |
+| THEME-01..03 | Name menu → Themes → Midnight | Menu: Themes, Log out; 10 cards; whole app turned navy; tick on Midnight |
+| THEME-04 | Reload with Terracotta chosen | Still Terracotta |
+| THEME-05 ✗ | Saved theme set to `hacker;color:red` | Ignored; app followed the device |
+| BULK-01/02 | Tick 2 accounts, then the header box | "2 accounts selected (8 contacts)"; then "50 accounts selected (171 contacts) · Select all 502 matching"; ticking didn't open the account |
+| BULK-03/04 ✗ | Assign disabled until a person chosen; then Kreedo + LetsTransport to Arjun | Both saved on the server as Arjun's |
+| BULK-09 ✗ | Delete Lotus Mall, Cancel | All 4 contacts still there |
+| BULK-10 ✗ | Arjun on Accounts | No tick boxes |
 
 ## Checks against a running server (API), all pass
 
@@ -134,7 +152,7 @@ SAN-07  after signing out, /api/me is refused
 ## How to run it again
 
 ```bash
-npm test                                         # front end, 159
+npm test                                         # front end, 188
 cd backend && pytest -q                          # server, 60 (needs Postgres)
 python scripts/qa_checks.py http://<server>      # running server, 24 (DEV_LOGIN on; never production)
 ```

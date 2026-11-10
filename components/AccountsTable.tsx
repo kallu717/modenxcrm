@@ -23,20 +23,40 @@ function initials(name: string): string {
   return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 }
 
+// With `selection`, each row gets a tick box (managers only), plus one in the
+// header for every row shown.
 export default function AccountsTable({
   accounts,
   onOpen,
+  selection,
 }: {
   accounts: AccountSummary[];
   onOpen: (name: string) => void;
+  selection?: { selected: Set<string>; toggle: (name: string) => void; toggleAll: (names: string[]) => void };
 }) {
   const pendingAccountRequestFor = useStore((s) => s.pendingAccountRequestFor);
+  const shownNames = accounts.map((a) => a.name);
+  const allShown = !!selection && shownNames.length > 0 && shownNames.every((n) => selection.selected.has(n));
+  const someShown = !!selection && shownNames.some((n) => selection.selected.has(n));
 
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-[12.5px]" style={{ borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ borderBottom: "1px solid var(--grid)" }}>
+            {selection && (
+              <th className="py-2 pl-2 pr-1 w-8">
+                <input
+                  type="checkbox"
+                  aria-label="Select every account on this page"
+                  checked={allShown}
+                  ref={(el) => {
+                    if (el) el.indeterminate = someShown && !allShown;
+                  }}
+                  onChange={() => selection.toggleAll(shownNames)}
+                />
+              </th>
+            )}
             <th className="text-left py-2 px-2" style={{ color: "var(--muted)" }}>Account</th>
             <th className="text-left py-2 px-2" style={{ color: "var(--muted)" }}>Contacts</th>
             <th className="text-left py-2 px-2" style={{ color: "var(--muted)" }}>Functions covered</th>
@@ -50,7 +70,7 @@ export default function AccountsTable({
         <tbody>
           {accounts.length === 0 && (
             <tr>
-              <td colSpan={8} className="text-center py-8" style={{ color: "var(--muted)" }}>
+              <td colSpan={selection ? 9 : 8} className="text-center py-8" style={{ color: "var(--muted)" }}>
                 No accounts match these filters.
               </td>
             </tr>
@@ -62,13 +82,24 @@ export default function AccountsTable({
             const bucket = agingBucket(a.agingDays);
             const aStyle = bucket ? AGING_STYLE[bucket.cls] : null;
             const pending = pendingAccountRequestFor(a.name);
+            const ticked = !!selection?.selected.has(a.name);
             return (
               <tr
                 key={a.name}
                 className="cursor-pointer"
-                style={{ borderBottom: "1px solid var(--grid)" }}
+                style={{ borderBottom: "1px solid var(--grid)", background: ticked ? "var(--accent-soft)" : undefined }}
                 onClick={() => onOpen(a.name)}
               >
+                {selection && (
+                  <td className="py-2 pl-2 pr-1" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${a.name}`}
+                      checked={ticked}
+                      onChange={() => selection.toggle(a.name)}
+                    />
+                  </td>
+                )}
                 <td className="py-2 px-2">
                   <div style={{ color: "var(--ink)" }}>
                     {a.name}

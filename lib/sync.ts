@@ -1,7 +1,7 @@
 import { api, ApiError, describeError, type Bootstrap, type RecordItem, type RecordKind, type SyncBody, type Versioned } from "./api";
 import { setDirectory } from "./constants";
 import { useStore, type ChangeRequest } from "./store";
-import type { CompanyHoliday, Lead, LeaveRequest, Rep, RepLeave } from "./types";
+import type { CompanyHoliday, Lead, LeaveRequest, PaymentRecord, Rep, RepLeave } from "./types";
 
 // Keeps the store and the server in step.
 //
@@ -23,7 +23,7 @@ export interface Snapshot {
 }
 
 // Each slice of the store maps onto one kind of server record.
-export function recordsOf(s: Pick<StoreSlice, "changeRequests" | "leaveRequests" | "repLeaves" | "companyHolidays" | "paymentReminders" | "targets">): RecordItem[] {
+export function recordsOf(s: Pick<StoreSlice, "changeRequests" | "leaveRequests" | "repLeaves" | "companyHolidays" | "paymentReminders" | "payments" | "targets">): RecordItem[] {
   return [
     ...s.changeRequests.map((c) => ({ kind: "change_request" as const, id: c.id, data: c })),
     ...s.leaveRequests.map((r) => ({ kind: "leave_request" as const, id: r.id, data: r })),
@@ -35,6 +35,7 @@ export function recordsOf(s: Pick<StoreSlice, "changeRequests" | "leaveRequests"
       data: { billingDate },
     })),
     ...Object.entries(s.targets).map(([repId, t]) => ({ kind: "target" as const, id: repId, data: t })),
+    ...Object.entries(s.payments).map(([id, p]) => ({ kind: "payment" as const, id, data: p })),
   ];
 }
 
@@ -95,6 +96,7 @@ export function fromServer(b: Bootstrap) {
       r.payment_reminder.map((x) => [x.id, (x.data as { billingDate: string }).billingDate])
     ),
     targets: Object.fromEntries(r.target.map((x) => [x.id, x.data as { callsPerDay: number }])),
+    payments: Object.fromEntries((r.payment ?? []).map((x) => [x.id, x.data as PaymentRecord])),
   };
 }
 

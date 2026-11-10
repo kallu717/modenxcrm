@@ -23,7 +23,7 @@ function WaitingForAccess() {
         </h1>
         <p className="mt-2 text-[12.5px]" style={{ color: "var(--muted)" }}>
           {email ? <>You&apos;re signed in as <b style={{ color: "var(--ink)" }}>{email}</b>. </> : null}
-          An admin needs to give you a role before you can use ModenX Pipeline. Ask them to open Settings and assign
+          An admin needs to give you a role before you can use bdCRM for ModenX. Ask them to open Settings and assign
           you one, then check again.
         </p>
         <div className="mt-5 flex gap-2 justify-center">

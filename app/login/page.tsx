@@ -23,7 +23,7 @@ export default function LoginPage() {
           M
         </div>
         <h1 className="mt-4 text-[19px] font-semibold" style={{ color: "var(--ink)" }}>
-          ModenX <span style={{ color: "var(--muted)" }}>Pipeline</span>
+          bdCRM <span style={{ color: "var(--muted)" }}>for ModenX</span>
         </h1>
         <p className="mt-1 text-[12.5px]" style={{ color: "var(--muted)" }}>
           Sign in with your ModenX work account to continue.

@@ -85,6 +85,16 @@ export interface Lead {
   activity: ActivityEntry[];
 }
 
+// A monthly debit someone confirmed as received. Keyed "<lead id>@<billing
+// date>". The server fills in markedBy and paidOn.
+export interface PaymentRecord {
+  leadId: string;
+  billingDate: string;
+  amount: number;
+  markedBy?: string;
+  paidOn?: string;
+}
+
 export interface Plan {
   id: string;
   name: string;

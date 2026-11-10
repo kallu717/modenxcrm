@@ -8,8 +8,10 @@ import { followupBucket } from "@/lib/dates";
 import { duePayments } from "@/lib/revenue";
 import { signOut } from "@/lib/sync";
 import { ROLE_LABELS } from "@/lib/types";
+import ThemesModal from "@/components/ThemesModal";
 
 const NAV_ITEMS = [
+  { href: "/dashboard", label: "Dashboard" },
   { href: "/pipeline", label: "Pipeline" },
   { href: "/leads", label: "Leads" },
   { href: "/accounts", label: "Accounts" },
@@ -34,11 +36,13 @@ export default function Masthead() {
   const changeRequests = useStore((s) => s.changeRequests);
   const leaveRequests = useStore((s) => s.leaveRequests);
   const paymentReminders = useStore((s) => s.paymentReminders);
+  const payments = useStore((s) => s.payments);
   const currentUserId = useStore((s) => s.currentUserId);
   const currentUser = useStore((s) => s.currentUser());
   const isManager = useStore((s) => s.isManager());
   const isAdmin = useStore((s) => s.isAdmin());
   const [menuOpen, setMenuOpen] = useState(false);
+  const [themesOpen, setThemesOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Follow-ups carries edit approvals and upcoming mandate debits too, so its
@@ -51,11 +55,11 @@ export default function Masthead() {
     }).length;
     const pendingCr = changeRequests.filter((c) => c.status === "pending");
     const approvals = isManager ? pendingCr.length : pendingCr.filter((c) => c.requestedBy === currentUserId).length;
-    const payments = duePayments(scope, paymentReminders).length;
+    const paymentsDue = duePayments(scope, payments, paymentReminders).length;
     const pendingLeave = leaveRequests.filter((r) => r.status === "pending");
     const calendar = isManager ? pendingLeave.length : pendingLeave.filter((r) => r.repId === currentUserId).length;
-    return { followups: due + approvals + payments, calendar, unassigned: leads.filter((l) => !l.assignee).length };
-  }, [leads, changeRequests, leaveRequests, paymentReminders, isManager, currentUserId]);
+    return { followups: due + approvals + paymentsDue, calendar, unassigned: leads.filter((l) => !l.assignee).length };
+  }, [leads, changeRequests, leaveRequests, paymentReminders, payments, isManager, currentUserId]);
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -69,7 +73,7 @@ export default function Masthead() {
     const blocked =
       (!isManager && MANAGER_ONLY_PATHS.some((p) => pathname?.startsWith(p))) ||
       (!isAdmin && ADMIN_ONLY_PATHS.some((p) => pathname?.startsWith(p)));
-    if (blocked) router.replace("/pipeline");
+    if (blocked) router.replace("/dashboard");
   }, [isManager, isAdmin, pathname, router]);
 
   return (
@@ -83,7 +87,7 @@ export default function Masthead() {
             M
           </div>
           <p className="font-semibold text-[15px]" style={{ color: "var(--ink)" }}>
-            ModenX <span style={{ color: "var(--muted)" }}>Pipeline</span>
+            bdCRM <span style={{ color: "var(--muted)" }}>for ModenX</span>
           </p>
         </div>
 
@@ -169,6 +173,18 @@ export default function Masthead() {
               <button
                 type="button"
                 role="menuitem"
+                className="w-full px-3 py-2.5 text-left text-[13px] font-medium border-b"
+                style={{ color: "var(--ink)", borderColor: "var(--grid)" }}
+                onClick={() => {
+                  setMenuOpen(false);
+                  setThemesOpen(true);
+                }}
+              >
+                Themes
+              </button>
+              <button
+                type="button"
+                role="menuitem"
                 className="w-full px-3 py-2.5 text-left text-[13px] font-medium"
                 style={{ color: "var(--crit)" }}
                 onClick={() => {
@@ -182,6 +198,7 @@ export default function Masthead() {
           )}
         </div>
       </div>
+      {themesOpen && <ThemesModal onClose={() => setThemesOpen(false)} />}
     </header>
   );
 }

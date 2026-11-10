@@ -197,3 +197,23 @@ export function filterLocations(
 export function accountHref(name: string): string {
   return `/accounts/view?name=${encodeURIComponent(name)}`;
 }
+
+// Spreadsheet apps run a cell starting with = + - @ as a formula, so an
+// imported value like "=HYPERLINK(...)" could do something on open. Such
+// cells get a leading apostrophe, which shows as plain text.
+function csvCell(v: string): string {
+  const safe = /^[=+\-@\t\r]/.test(v) ? "'" + v : v;
+  return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+}
+
+// Every contact of the given accounts, one row each, for a spreadsheet.
+export function accountsCsv(accounts: AccountSummary[], ownerName: (id: string | null) => string): string {
+  const header = ["Account", "Account type", "Contact name", "Job title", "City", "Email", "Phone", "Stage", "Priority", "Owner"];
+  const rows = accounts.flatMap((a) =>
+    a.contacts.map((c) => [
+      a.name, c.type, c.name, c.title, c.city, c.email, c.phone, c.stage,
+      c.priorityOverride || c.priorityAuto, ownerName(c.assignee),
+    ])
+  );
+  return [header, ...rows].map((r) => r.map((v) => csvCell(String(v ?? ""))).join(",")).join("\r\n");
+}

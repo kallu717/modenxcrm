@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { isoToday, isoPlusDays, fmtShortDate, fmtFollowup, to12h } from "./dates";
 import { scoreLead, bandForScore } from "./scoring";
-import { PLANS, fmtInr, leadMrr } from "./revenue";
+import { PLANS, fmtInr, leadMrr, paymentId } from "./revenue";
 import { STAGES, EDITABLE_FIELDS, ACCOUNT_EDITABLE_FIELDS, repById } from "./constants";
 import { newId } from "./ids";
 import { cityLabel, locationKey } from "./accounts";
@@ -12,6 +12,7 @@ import type {
   EmailQuality,
   Lead,
   LeaveRequest,
+  PaymentRecord,
   Rep,
   RepLeave,
   Role,
@@ -165,6 +166,9 @@ interface StoreState {
   // ---- payments ----
   paymentReminders: Record<string, string>;
   logPaymentReminder: (leadId: string, billingDate: string) => void;
+  payments: Record<string, PaymentRecord>;
+  markPaid: (leadId: string, billingDate: string) => void;
+  unmarkPaid: (paymentId: string) => void;
 
   // ---- targets (reports) ----
   targets: Record<string, { callsPerDay: number }>;
@@ -203,6 +207,7 @@ export const useStore = create<StoreState>((set, get) => ({
   leaveRequests: [],
   changeRequests: [],
   paymentReminders: {},
+  payments: {},
   targets: {},
 
   toast: null,
@@ -536,6 +541,7 @@ export const useStore = create<StoreState>((set, get) => ({
           (c) => !(c.scope === "lead" && c.leadId === leadId)
         ),
         paymentReminders,
+        payments: Object.fromEntries(Object.entries(state.payments).filter(([, p]) => p.leadId !== leadId)),
       };
     });
   },
@@ -547,6 +553,7 @@ export const useStore = create<StoreState>((set, get) => ({
         Object.entries(state.paymentReminders).filter(([id]) => !removedIds.has(id))
       );
       return {
+        payments: Object.fromEntries(Object.entries(state.payments).filter(([, p]) => !removedIds.has(p.leadId))),
         leads: state.leads.filter((l) => !removedIds.has(l.id)),
         // Contact-level edit requests go too, or they'd linger as ghost approvals.
         changeRequests: state.changeRequests.filter((c) =>
@@ -620,6 +627,41 @@ export const useStore = create<StoreState>((set, get) => ({
           : l
       ),
     }));
+  },
+
+  // Reps can mark debits on their own accounts; only a manager can undo one
+  // (the server enforces both).
+  markPaid: (leadId, billingDate) => {
+    const state = get();
+    const me = state.currentUser();
+    const lead = state.leads.find((l) => l.id === leadId);
+    if (!lead) return;
+    if (!state.isManager() && lead.assignee !== state.currentUserId) return;
+    const id = paymentId(leadId, billingDate);
+    if (state.payments[id]) return;
+    const amount = leadMrr(lead);
+    set((s) => ({
+      payments: { ...s.payments, [id]: { leadId, billingDate, amount, markedBy: me.id, paidOn: isoToday() } },
+      leads: s.leads.map((l) =>
+        l.id === leadId
+          ? {
+              ...l,
+              activity: [
+                activityEntry(me.name, `Payment received — ${fmtInr(amount)} for the ${fmtShortDate(billingDate)} debit.`),
+                ...l.activity,
+              ],
+            }
+          : l
+      ),
+    }));
+  },
+
+  unmarkPaid: (id) => {
+    const state = get();
+    if (!state.isManager() || !state.payments[id]) return;
+    const { [id]: _gone, ...payments } = state.payments;
+    void _gone;
+    set({ payments });
   },
 
   setRepTarget: (repId, callsPerDay) => {

@@ -93,6 +93,16 @@ def has_markup(value) -> bool:
     return False
 
 
+def is_iso_date(value) -> bool:
+    if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        return False
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        return False
+    return True
+
+
 def to_int(value) -> int | None:
     try:
         return int(value)
@@ -553,6 +563,21 @@ def authorize_write(db: Session, user: User, kind: str, rid: str, existing: Reco
         lead = db.get(Lead, rid)
         if lead is None or (not mgr and lead.assignee_id != user.id):
             raise HTTPException(403, "that lead is not assigned to you")
+        return lead.assignee_id
+
+    if kind == "payment":
+        # One record per monthly debit, id "<lead id>@<billing date>". Who
+        # marked it and when are set here, not taken from the browser.
+        lead_id, billing = data.get("leadId"), data.get("billingDate")
+        if not isinstance(lead_id, str) or not is_iso_date(billing) or rid != f"{lead_id}@{billing}":
+            raise HTTPException(422, "a payment needs leadId and billingDate matching its id")
+        lead = db.get(Lead, lead_id)
+        if lead is None or (not mgr and lead.assignee_id != user.id):
+            raise HTTPException(403, "that lead is not assigned to you")
+        if existing is not None and not mgr:
+            raise HTTPException(403, "only a manager can change a payment already marked")
+        data["markedBy"] = str(user.id)
+        data["paidOn"] = today_iso()
         return lead.assignee_id
 
     raise HTTPException(404, "unknown kind")

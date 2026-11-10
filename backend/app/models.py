@@ -13,7 +13,7 @@ from .db import Base
 # whose access was taken away): they can't see or change anything.
 ROLES = ("Pending", "Rep", "Manager", "Admin")
 STAGES = ("new", "contacted", "qualified", "unqualified", "proposal", "won", "lost")
-RECORD_KINDS = ("change_request", "leave_request", "leave_day", "holiday", "payment_reminder", "target")
+RECORD_KINDS = ("change_request", "leave_request", "leave_day", "holiday", "payment_reminder", "target", "payment")
 
 
 def _one_of(column: str, values: tuple[str, ...]) -> str:

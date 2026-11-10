@@ -41,7 +41,7 @@ def test_a_database_from_before_migrations_is_upgraded_in_place():
     upgrade()
     with engine.connect() as c:
         assert c.execute(text("SELECT count(*) FROM users")).scalar() == 1  # data kept
-        assert c.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0004"
+        assert c.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0005"
 
 
 def test_the_database_refuses_an_unknown_stage_or_role():

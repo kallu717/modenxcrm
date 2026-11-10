@@ -130,6 +130,72 @@ A location is a city within an account. One owner per location; an account in on
 | PAGING-13 | ✗ | Saved filters broken or tampered with | No filter applied; page still opens | FE PAGING12, UI |
 | PAGING-14 | ✗ | A second person signs in on the same browser | Doesn't see the first person's filters or page | UI |
 
+### 2.6 Dashboard (DASH)
+
+| ID | | Do | Expect | How |
+|---|---|---|---|---|
+| DASH-01 | | Sign in, or open the site's address | Lands on Dashboard; "Dashboard" is the first tab | UI |
+| DASH-02 | | Rep or selling manager looks at the top | Greeting, date; tiles for overdue, today, meetings, payments due, calls today vs target | FE DASH8, UI |
+| DASH-03 | | Follow-ups card | Overdue (oldest first) then today's; "Contacted" button on each | FE DASH1, UI |
+| DASH-04 | ✗ | Won/lost contacts with old follow-up dates | Not listed | FE DASH1 |
+| DASH-05 | | Meetings card | Scheduled meetings from today to 7 days ahead, in time order | FE DASH2, UI |
+| DASH-06 | ✗ | Past, cancelled, done, or 8-days-away meetings | Not listed | FE DASH3 |
+| DASH-07 | | Hot with no next step; New, not contacted yet | Right contacts, newest assignment first | FE DASH4–5, UI |
+| DASH-08 | | Calls today | Same count and target (default 8) as Reports | FE DASH6, UI |
+| DASH-09 | | Your requests | Waiting ones, plus answers from the last 7 days; nobody else's | FE DASH7 |
+| DASH-10 | | Manager's "Your team" | Approvals waiting, cities with no owner, stuck 60+ days, revenue this month vs marked paid | FE DASH9–11, UI |
+| DASH-11 | | Team today | Each seller: away reason, calls vs target, overdue, meetings today | FE DASH12, UI |
+| DASH-12 | ✗ | Rep opens Dashboard | Only their own work; no team section | UI |
+| DASH-13 | | Admin opens Dashboard | Team section and people waiting for access; no personal "my day" | UI |
+| DASH-14 | ✗ | Nothing to show in a card | Friendly empty message, no error | UI |
+
+### 2.7 Mark paid (PAID)
+
+| ID | | Do | Expect | How |
+|---|---|---|---|---|
+| PAID-01 | | Debit due within 7 days, or unpaid in the last 30 days | Listed under Payments due (Dashboard and Follow-ups), overdue in red | FE D12–D18, UI |
+| PAID-02 | | Log reminder | Row stays, marked "Reminder sent" | FE D13, UI |
+| PAID-03 | | Mark paid | Row leaves the list; saved on the server with who and when; note on the contact | FE PAID1, BE `test_rep_marks_a_payment_on_their_own_account_paid`, UI |
+| PAID-04 | ✗ | Browser sends its own "marked by" or "paid on" | Server overwrites both | BE same test |
+| PAID-05 | ✗ | Rep marks someone else's account paid | Refused (403) | FE PAID2, BE `test_rep_cannot_mark_someone_elses_account_paid`, UI |
+| PAID-06 | ✗ | Rep tries to undo or change a marked payment | Refused (403); only a manager can undo | FE PAID2–3, BE `test_rep_cannot_undo_or_rewrite_a_marked_payment` |
+| PAID-07 | ✗ | Bad date, id that doesn't match, unknown contact | Refused (422/403) | BE `test_payment_with_a_bad_date_or_mismatched_id_is_refused` |
+| PAID-08 | ✗ | Person without a role | Refused | BE `test_pending_user_cannot_mark_payments` |
+
+### 2.8 Themes (THEME)
+
+| ID | | Do | Expect | How |
+|---|---|---|---|---|
+| THEME-01 | | Click your name (top right) | Menu shows Themes above Log out | UI |
+| THEME-02 | | Open Themes | 5 light and 5 dark themes, each card a live preview; "Match my device" | FE THEME1, UI |
+| THEME-03 | | Pick one | Whole app changes at once; tick on the chosen card | UI |
+| THEME-04 | | Reload | Same theme, no flash of the old one | FE THEME4, UI |
+| THEME-05 | ✗ | Saved theme name tampered with | Ignored; app follows the device | FE THEME3–4, UI |
+| THEME-06 | | Every theme defines every colour | Stylesheet check | FE THEME2 |
+
+### 2.9 Acting on many accounts (BULK)
+
+| ID | | Do | Expect | How |
+|---|---|---|---|---|
+| BULK-01 | | Manager ticks accounts on Accounts | Bar appears at the bottom with the count of accounts and contacts | UI |
+| BULK-02 | | Tick box in the header | Ticks every account on the page; offers "Select all N matching" | UI |
+| BULK-03 | | Assign to a person | Every city of each ticked account goes to them; saved on the server | FE BULK1, UI + server |
+| BULK-04 | ✗ | Press Assign before choosing a person | Button disabled | UI |
+| BULK-05 | | Unassign; set priority (or back to automatic) | Applied to every contact of the ticked accounts | FE BULK2, BULK4 |
+| BULK-06 | | Export CSV | One row per contact, with header | FE BULK5 |
+| BULK-07 | ✗ | Contact data that looks like a spreadsheet formula | Exported as plain text | FE BULK6 |
+| BULK-08 | | Delete, confirmed | Accounts and their contacts removed; others untouched | FE BULK3 |
+| BULK-09 | ✗ | Delete, then Cancel | Nothing deleted | UI |
+| BULK-10 | ✗ | Rep opens Accounts | No tick boxes, no bar | UI |
+
+### 2.10 Name and scoring (MISC)
+
+| ID | | Do | Expect | How |
+|---|---|---|---|---|
+| MISC-01 | | Look at the browser tab, header, sign-in page | "bdCRM for ModenX" | UI |
+| MISC-02 | ✗ | Same contact in Bengaluru, Mumbai, or no city | Same score; no city bonus | FE B6 |
+| MISC-03 | | Server upgrade on existing data | The old +10 comes off once; manual priorities kept | BE `test_saved_scores_lose_the_old_bengaluru_bonus_once` |
+
 ## 3. Regression (REG): must keep working
 
 ### 3.1 Sign-in, roles, settings (AUTH)
