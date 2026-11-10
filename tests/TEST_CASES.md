@@ -109,7 +109,7 @@ Run with `npm test`.
 | H9 | Phone stored as a number in Excel | Read as text |
 | H10 | A real .xlsx file | Parsed to rows |
 
-## I. Account assignment (1 account = 1 rep)
+## I. Account assignment (whole account; ownership per city is in docs/TEST_PLAN.md, LOC)
 
 | ID | Scenario | Expected |
 |---|---|---|

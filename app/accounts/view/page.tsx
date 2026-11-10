@@ -62,7 +62,9 @@ export default function AccountPage({ searchParams }: PageProps<"/accounts/view"
   const unassignedCities = account.locations.filter((l) => !l.owner).length;
   const showContacts = (key: string) => {
     setCityKey(key);
-    document.getElementById("account-contacts")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // An instant jump: smooth scrolling doesn't run in every browser window
+    // (it stalled in testing), and the list is what the click is for.
+    document.getElementById("account-contacts")?.scrollIntoView({ block: "start" });
   };
 
   return (

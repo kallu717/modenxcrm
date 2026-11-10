@@ -12,7 +12,7 @@ const importRow = (p: Partial<ImportRow>): ImportRow => ({
   email: "", verified: "", phone: "", city: "Pune", notes: "", ...p,
 });
 
-describe("I. Account assignment (1 account = 1 rep)", () => {
+describe("I. Account assignment (whole account; per city in LOC)", () => {
   const a = makeLead({ account: "Luma Home", ownerSince: "2026-06-01" });
   const b = makeLead({ account: "Luma Home", ownerSince: "2026-06-01" });
   beforeEach(() => resetStore([a, b]));

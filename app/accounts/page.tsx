@@ -31,9 +31,21 @@ export default function AccountsPage({ searchParams }: PageProps<"/accounts">) {
     () => Array.from(new Set(visibleLeads.map((l) => l.city))).sort(),
     [visibleLeads]
   );
-  const filtered = useMemo(() => filterLeads(visibleLeads, filters), [visibleLeads, filters]);
+  const filtered = useMemo(
+    () => (accountParam ? [] : filterLeads(visibleLeads, filters)),
+    [accountParam, visibleLeads, filters]
+  );
   const accounts = useMemo(() => buildAccounts(filtered), [filtered]);
   const contactTotal = accounts.reduce((n, a) => n + a.contacts.length, 0);
+
+  // On its way to an account page: don't build the whole list first.
+  if (accountParam) {
+    return (
+      <p className="py-8 text-[13px]" style={{ color: "var(--muted)" }}>
+        Opening {accountParam}…
+      </p>
+    );
+  }
 
   return (
     <div className="py-5">
