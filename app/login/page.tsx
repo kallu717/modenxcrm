@@ -1,3 +1,5 @@
+import Logo from "@/components/Logo";
+
 function MicrosoftLogo() {
   return (
     <svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true">
@@ -16,11 +18,8 @@ export default function LoginPage() {
         className="w-full max-w-sm rounded-xl p-8 text-center"
         style={{ background: "var(--surface)", border: "1px solid var(--grid)", boxShadow: "var(--shadow-lg)" }}
       >
-        <div
-          className="w-11 h-11 rounded-[10px] mx-auto flex items-center justify-center text-white font-semibold text-lg"
-          style={{ background: "var(--accent)" }}
-        >
-          M
+        <div className="flex justify-center">
+          <Logo size={44} title="bdCRM logo" />
         </div>
         <h1 className="mt-4 text-[19px] font-semibold" style={{ color: "var(--ink)" }}>
           bdCRM <span style={{ color: "var(--muted)" }}>for ModenX</span>

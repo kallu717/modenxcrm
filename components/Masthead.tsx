@@ -9,6 +9,7 @@ import { duePayments } from "@/lib/revenue";
 import { signOut } from "@/lib/sync";
 import { ROLE_LABELS } from "@/lib/types";
 import ThemesModal from "@/components/ThemesModal";
+import Logo from "@/components/Logo";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard" },
@@ -80,12 +81,7 @@ export default function Masthead() {
     <header className="sticky top-0 z-50 border-b" style={{ background: "var(--bg)", borderColor: "var(--grid)" }}>
       <div className="max-w-[1320px] mx-auto px-[18px] py-2.5 flex items-center gap-6">
         <div className="flex items-center gap-2 shrink-0">
-          <div
-            className="w-[26px] h-[26px] rounded-[7px] flex items-center justify-center text-white font-semibold text-sm"
-            style={{ background: "var(--accent)" }}
-          >
-            M
-          </div>
+          <Logo size={26} />
           <p className="font-semibold text-[15px]" style={{ color: "var(--ink)" }}>
             bdCRM <span style={{ color: "var(--muted)" }}>for ModenX</span>
           </p>
