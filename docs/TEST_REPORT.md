@@ -27,6 +27,7 @@ RK), Asha (Admin), New Hire (Pending).
 | 2 | PAGE-13 | Clicking a city's contact count filtered the list but didn't scroll to it (smooth scrolling stalled) | Instant jump | Pass: list in view, filtered |
 | 3 | — | Test IDs collided: new L/M/N/O tests reused existing IDs; R1–R3 used twice | Renamed to LOC, ASG, CITY, PAGE, ROLE | No duplicates |
 | 4 | — | Outdated test descriptions still said "only sales reps can be given leads" and "1 account = 1 rep" | ROLE3 now checks reps **and managers** can own leads, admins can't | Pass |
+| 5 | PAGE-01 (found in the dev environment, 11 Nov) | Opening any account showed "No account chosen." The page read `?name=` through its `searchParams` prop, which is empty in a production build because the page is built ahead of time. Development mode builds pages on request, so local checks passed. Same pattern on Leads (`?assignee=`) and old `?account=` links | All three read the address with `useSearchParams` inside `<Suspense>`; guard test PAGES1–2 fails if a page reads `searchParams` again | Pass on a local **production** build: Reliance Retail opens (301 contacts, 77 cities); click from the list, old link and `?assignee=` all work |
 
 ## Open findings (not fixed, need a decision or a later change)
 
@@ -40,6 +41,8 @@ RK), Asha (Admin), New Hire (Pending).
 | F | **Priority scoring barely recognises real job titles**: only 5 of 1,906 contacts were Hot, and **none** since the Bengaluru bonus was removed (Lead Desk rates 687 as hot). The CRM scores titles by an exact list of 11 demo titles ("Leasing Head", "Founder"…); only 28 real contacts match, everyone else gets the lowest title score | Hot/Warm filters and "who to call first" are misleading on real data | Score titles by keywords (CEO, Director, Head, VP, Manager…), same rule on server and screens |
 
 ## Not tested (and why)
+
+- **Lesson from defect 5:** screen checks must also run on a production build (`npm run build && npm start`), not only in development mode.
 
 - **Entra ID sign-in (AUTH-11)**: no Azure credentials yet.
 - **Docker images, compose file, GitHub Actions**: not run on this machine.

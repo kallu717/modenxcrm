@@ -1,7 +1,8 @@
 "use client";
 
-import { use, useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { STAGES } from "@/lib/constants";
 import { buildAccounts } from "@/lib/accounts";
@@ -28,9 +29,20 @@ function Stat({ value, label, tone }: { value: number; label: string; tone?: str
 
 // One account on its own page: who owns which city, its contacts, and its
 // details. Reached from the Accounts list and from a contact's "manage" link.
-export default function AccountPage({ searchParams }: PageProps<"/accounts/view">) {
-  const { name } = use(searchParams);
-  const accountName = typeof name === "string" ? name : "";
+// Pages here are built ahead of time, before anyone opens a link, so the
+// address's ?query is read in the browser with useSearchParams, inside
+// <Suspense>. Reading the page's searchParams prop instead worked in
+// development but came through empty in production builds.
+export default function AccountPage() {
+  return (
+    <Suspense fallback={null}>
+      <AccountView />
+    </Suspense>
+  );
+}
+
+function AccountView() {
+  const accountName = useSearchParams().get("name") ?? "";
   const leads = useStore((s) => s.leads);
   const isManager = useStore((s) => s.isManager());
   const account = useMemo(() => buildAccounts(leads).find((a) => a.name === accountName), [leads, accountName]);

@@ -1,6 +1,7 @@
 "use client";
 
-import { use, useMemo, useRef, useState } from "react";
+import { Suspense, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { EMPTY_FILTERS, filterLeads, parseFilters, type FilterState } from "@/lib/filters";
 import { pageSlice } from "@/lib/paging";
@@ -13,9 +14,20 @@ import LeadsTable from "@/components/LeadsTable";
 import NewLeadModal from "@/components/NewLeadModal";
 import ImportModal from "@/components/ImportModal";
 
-export default function LeadsPage({ searchParams }: PageProps<"/leads">) {
-  const { assignee } = use(searchParams);
-  const assigneeParam = typeof assignee === "string" ? assignee : "";
+// Pages here are built ahead of time, before anyone opens a link, so the
+// address's ?query is read in the browser with useSearchParams, inside
+// <Suspense>. Reading the page's searchParams prop instead worked in
+// development but came through empty in production builds.
+export default function LeadsPage() {
+  return (
+    <Suspense fallback={null}>
+      <LeadsView />
+    </Suspense>
+  );
+}
+
+function LeadsView() {
+  const assigneeParam = useSearchParams().get("assignee") ?? "";
   const leads = useStore((s) => s.leads);
   const isManager = useStore((s) => s.isManager());
   const currentUserId = useStore((s) => s.currentUserId);

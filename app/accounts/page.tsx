@@ -1,7 +1,7 @@
 "use client";
 
-import { use, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { EMPTY_FILTERS, filterLeads, parseFilters, type FilterState } from "@/lib/filters";
 import { pageSlice } from "@/lib/paging";
@@ -13,9 +13,20 @@ import FilterBar from "@/components/FilterBar";
 import AccountsTable from "@/components/AccountsTable";
 import AccountsBulkBar from "@/components/AccountsBulkBar";
 
-export default function AccountsPage({ searchParams }: PageProps<"/accounts">) {
-  const { account } = use(searchParams);
-  const accountParam = typeof account === "string" ? account : null;
+// Pages here are built ahead of time, before anyone opens a link, so the
+// address's ?query is read in the browser with useSearchParams, inside
+// <Suspense>. Reading the page's searchParams prop instead worked in
+// development but came through empty in production builds.
+export default function AccountsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AccountsList />
+    </Suspense>
+  );
+}
+
+function AccountsList() {
+  const accountParam = useSearchParams().get("account");
   const router = useRouter();
   const leads = useStore((s) => s.leads);
   const isManager = useStore((s) => s.isManager());
