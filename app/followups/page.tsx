@@ -3,12 +3,13 @@
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { EDITABLE_FIELDS, ACCOUNT_EDITABLE_FIELDS, repById } from "@/lib/constants";
-import { fmtShortDate, fmtFollowup, fmtDueIn, followupBucket, daysUntil } from "@/lib/dates";
-import { duePayments, planById, fmtInr, leadMrr } from "@/lib/revenue";
+import { fmtShortDate, fmtFollowup, followupBucket } from "@/lib/dates";
+import { duePayments, fmtInr, leadMrr } from "@/lib/revenue";
 import { effectivePriority } from "@/lib/scoring";
 import { applyFuDateFilter, EMPTY_FU_DATE_FILTER, type FuDateFilter } from "@/lib/filters";
 import LeadDrawer from "@/components/LeadDrawer";
 import ContactedModal from "@/components/ContactedModal";
+import PaymentsList from "@/components/PaymentsList";
 import type { Lead } from "@/lib/types";
 import type { ChangeRequest } from "@/lib/store";
 
@@ -143,14 +144,17 @@ function Approvals({ onOpenLead }: { onOpenLead: (id: string) => void }) {
 
 function Payments({ visibleLeads, onOpenLead }: { visibleLeads: Lead[]; onOpenLead: (id: string) => void }) {
   const isManager = useStore((s) => s.isManager());
+  const payments = useStore((s) => s.payments);
   const paymentReminders = useStore((s) => s.paymentReminders);
-  const logPaymentReminder = useStore((s) => s.logPaymentReminder);
-  const showToast = useStore((s) => s.showToast);
 
-  const due = useMemo(() => duePayments(visibleLeads, paymentReminders), [visibleLeads, paymentReminders]);
+  const due = useMemo(
+    () => duePayments(visibleLeads, payments, paymentReminders),
+    [visibleLeads, payments, paymentReminders]
+  );
   if (!due.length) return null;
 
   const total = due.reduce((s, x) => s + leadMrr(x.lead), 0);
+  const overdue = due.filter((d) => d.status === "overdue").length;
 
   return (
     <section className="mb-6">
@@ -158,68 +162,11 @@ function Payments({ visibleLeads, onOpenLead }: { visibleLeads: Lead[]; onOpenLe
         Payments due ({due.length})
       </p>
       <p className="text-[12px] mt-0.5 mb-3" style={{ color: "var(--muted)" }}>
-        {isManager
-          ? `${fmtInr(total)} debiting in the next 7 days across ${due.length} mandate${due.length === 1 ? "" : "s"}.`
-          : `${fmtInr(total)} debiting from your accounts in the next 7 days — worth a heads-up before the mandate runs.`}
+        {fmtInr(total)} {isManager ? `across ${due.length} debit${due.length === 1 ? "" : "s"}` : "from your accounts"}
+        {overdue ? `, ${overdue} not marked paid yet` : ""}. Debits in the next 7 days, and any from the last 30 days
+        nobody has marked paid.
       </p>
-      <div className="space-y-2">
-        {due.map(({ lead, date }) => {
-          const rep = repById(lead.assignee);
-          const soon = daysUntil(date) <= 1;
-          return (
-            <div
-              key={lead.id}
-              className="flex items-center gap-3 rounded-lg p-3 cursor-pointer"
-              style={{
-                background: "var(--surface)",
-                boxShadow: "var(--shadow)",
-                borderLeft: soon ? "3px solid var(--crit)" : "3px solid transparent",
-              }}
-              onClick={() => onOpenLead(lead.id)}
-            >
-              <span className="font-mono text-[11.5px] w-24 shrink-0" style={{ color: soon ? "var(--crit)" : "var(--muted)" }}>
-                {fmtDueIn(date)}
-              </span>
-              <div className="flex-1 flex items-center gap-2 flex-wrap text-[12.5px]">
-                <span style={{ color: "var(--ink)" }}>{lead.account}</span>
-                <span
-                  className="px-1.5 py-0.5 rounded text-[10px] font-mono"
-                  style={{ background: "var(--accent-soft)", color: "var(--accent-ink)" }}
-                >
-                  {lead.type}
-                </span>
-                <span style={{ color: "var(--ink-2)" }}>{lead.name}</span>
-                <span className="font-mono" style={{ color: "var(--good)" }}>
-                  {planById(lead.plan)?.name} · {fmtInr(leadMrr(lead))}
-                </span>
-                {rep && (
-                  <span className="flex items-center gap-1" style={{ color: "var(--ink-2)" }}>
-                    <span
-                      className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-semibold"
-                      style={{ background: rep.color }}
-                    >
-                      {initials(rep.name)}
-                    </span>
-                    {rep.name}
-                  </span>
-                )}
-              </div>
-              <button
-                type="button"
-                className="px-2.5 py-1 rounded text-[12px] border shrink-0"
-                style={{ borderColor: "var(--grid)", color: "var(--ink)" }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  logPaymentReminder(lead.id, date);
-                  showToast("Reminder logged for " + lead.account);
-                }}
-              >
-                Log reminder sent
-              </button>
-            </div>
-          );
-        })}
-      </div>
+      <PaymentsList due={due} onOpenLead={onOpenLead} />
     </section>
   );
 }

@@ -1,16 +1,19 @@
 import { create } from "zustand";
 import { isoToday, isoPlusDays, fmtShortDate, fmtFollowup, to12h } from "./dates";
 import { scoreLead, bandForScore } from "./scoring";
-import { PLANS, fmtInr, leadMrr } from "./revenue";
-import { REPS, STAGES, EDITABLE_FIELDS, ACCOUNT_EDITABLE_FIELDS, repById } from "./constants";
-import { generateSeed } from "./seed";
+import { PLANS, fmtInr, leadMrr, paymentId } from "./revenue";
+import { STAGES, EDITABLE_FIELDS, ACCOUNT_EDITABLE_FIELDS, repById } from "./constants";
+import { newId } from "./ids";
+import { cityLabel, locationKey } from "./accounts";
 import type { ImportRow } from "./import";
+import type { SavedDashboard, WidgetPlacement } from "./widgets";
 import type {
   ActivityEntry,
   CompanyHoliday,
   EmailQuality,
   Lead,
   LeaveRequest,
+  PaymentRecord,
   Rep,
   RepLeave,
   Role,
@@ -63,15 +66,47 @@ function matchExistingAccount(leads: Lead[], name: string): { account: string; t
   return hit ? { account: hit.account, type: hit.type } : null;
 }
 
+// Owners are per location (account + city). A contact joins whoever owns its
+// city at that account; a city with no owner yet starts unassigned for a
+// manager to hand out, unless a rep is adding the contact themselves.
+function locationOwner(leads: Lead[], accountName: string, city: string, exceptLeadId?: string): string | null {
+  const key = locationKey(city);
+  return (
+    leads.find(
+      (l) => l.id !== exceptLeadId && l.account === accountName && locationKey(l.city) === key && l.assignee
+    )?.assignee || null
+  );
+}
+
 function resolveNewContactOwner(
   leads: Lead[],
   accountName: string,
+  city: string,
   currentUserId: string,
   isManager: boolean
 ): { existingOwner: string | null; assignee: string | null } {
-  const existingOwner = leads.find((l) => l.account === accountName && l.assignee)?.assignee || null;
+  const existingOwner = locationOwner(leads, accountName, city);
   const assignee = existingOwner || (isManager ? null : currentUserId);
   return { existingOwner, assignee };
+}
+
+function ownedNote(account: string, city: string, ownerId: string): string {
+  const where = locationKey(city) ? `${account} · ${city}` : account;
+  return `${where} is already owned by ${repById(ownerId)?.name} — kept with them.`;
+}
+
+// After a contact's city changes it belongs to its new location: if someone
+// else already owns that city at this account, the contact moves to them.
+function followLocationOwner(leads: Lead[], before: Lead, after: Lead, by: string): Lead {
+  if (locationKey(before.city) === locationKey(after.city)) return after;
+  const owner = locationOwner(leads, after.account, after.city, after.id);
+  if (!owner || owner === after.assignee) return after;
+  return {
+    ...after,
+    assignee: owner,
+    ownerSince: isoToday(),
+    activity: [activityEntry(by, `Moved to ${after.city}, so now with ${repById(owner)?.name}, who owns that location.`), ...after.activity],
+  };
 }
 
 export interface NewLeadInput {
@@ -94,28 +129,17 @@ interface StoreState {
   repLeaves: RepLeave[];
   leaveRequests: LeaveRequest[];
   changeRequests: ChangeRequest[];
-  leaveSeq: number;
-  crSeq: number;
-  lrSeq: number;
 
   // ---- derived / role helpers ----
   currentUser: () => Rep;
   isManager: () => boolean;
+  isAdmin: () => boolean;
   visibleLeads: () => Lead[];
   accountManageable: (accountName: string) => boolean;
 
-  // ---- user ----
-  setCurrentUser: (repId: string) => void;
-
   // ---- assignment ----
   assignAccount: (accountName: string, repId: string | null) => void;
-
-  // ---- auth (placeholder until Entra ID SSO is wired in) ----
-  isAuthenticated: boolean;
-  authReady: boolean;
-  hydrateAuth: () => void;
-  login: () => void;
-  logout: () => void;
+  assignLocation: (accountName: string, cityKey: string, repId: string | null) => void;
 
   // ---- feedback ----
   toast: { id: number; msg: string } | null;
@@ -129,8 +153,12 @@ interface StoreState {
   setMeetingStatus: (leadId: string, meetingId: string, status: "done" | "cancelled") => void;
   addNote: (leadId: string, txt: string, method: string) => void;
   setLeadPlan: (leadId: string, planId: string, mandateDate: string) => void;
+  // createLead and importLeads are the offline versions, kept for the tests.
+  // The app creates leads on the server (lib/api.ts), which assigns the ids
+  // and checks duplicates across everyone's leads, then calls addLeads.
   createLead: (input: NewLeadInput) => Lead | null;
   importLeads: (rows: ImportRow[], sourceLabel: string) => { count: number; toOwnAccount: number };
+  addLeads: (leads: Lead[]) => void;
   deleteLead: (leadId: string) => void;
   deleteAccount: (accountName: string) => void;
   snoozeFollowup: (leadId: string, days: number) => void;
@@ -139,6 +167,13 @@ interface StoreState {
   // ---- payments ----
   paymentReminders: Record<string, string>;
   logPaymentReminder: (leadId: string, billingDate: string) => void;
+  payments: Record<string, PaymentRecord>;
+  markPaid: (leadId: string, billingDate: string) => void;
+
+  // ---- dashboard layouts, one per person (by user id) ----
+  dashboards: Record<string, SavedDashboard>;
+  saveDashboard: (widgets: WidgetPlacement[]) => void;
+  unmarkPaid: (paymentId: string) => void;
 
   // ---- targets (reports) ----
   targets: Record<string, { callsPerDay: number }>;
@@ -164,51 +199,30 @@ interface StoreState {
   removeHoliday: (date: string) => void;
 }
 
-const seedData = generateSeed();
+const NOBODY: Rep = { id: "", name: "", role: "Rep", color: "" };
 
+// Starts empty. lib/sync.ts fills it from the server once the user has signed
+// in, and saves what the actions below change.
 export const useStore = create<StoreState>((set, get) => ({
-  reps: REPS,
-  currentUserId: "meera",
-  leads: seedData.leads,
-  companyHolidays: seedData.companyHolidays,
-  repLeaves: seedData.repLeaves,
+  reps: [],
+  currentUserId: "",
+  leads: [],
+  companyHolidays: [],
+  repLeaves: [],
   leaveRequests: [],
   changeRequests: [],
-  leaveSeq: 0,
-  crSeq: 0,
-  lrSeq: 0,
   paymentReminders: {},
-  targets: Object.fromEntries(REPS.filter((r) => r.role === "Rep").map((r) => [r.id, { callsPerDay: 8 }])),
-
-  // Placeholder only: there's no real session yet. The flag survives a page
-  // refresh via sessionStorage; Phase 2 replaces this with an Entra ID session.
-  isAuthenticated: false,
-  authReady: false,
-  hydrateAuth: () => {
-    let authed = false;
-    try {
-      authed = sessionStorage.getItem("modenx-auth") === "1";
-    } catch {}
-    set({ isAuthenticated: authed, authReady: true });
-  },
-  login: () => {
-    try {
-      sessionStorage.setItem("modenx-auth", "1");
-    } catch {}
-    set({ isAuthenticated: true, currentUserId: "meera" });
-  },
-  logout: () => {
-    try {
-      sessionStorage.removeItem("modenx-auth");
-    } catch {}
-    set({ isAuthenticated: false });
-  },
+  payments: {},
+  dashboards: {},
+  targets: {},
 
   toast: null,
   showToast: (msg) => set({ toast: { id: Date.now(), msg } }),
 
-  currentUser: () => repById(get().currentUserId) || get().reps[0],
-  isManager: () => get().currentUser().role === "Manager",
+  // NOBODY only shows before the server has said who is signed in.
+  currentUser: () => repById(get().currentUserId) || NOBODY,
+  isManager: () => ["Manager", "Admin"].includes(get().currentUser().role),
+  isAdmin: () => get().currentUser().role === "Admin",
 
   // Reps only ever see leads a manager has assigned to them — there's no
   // self-claim pool to browse. Managers see everyone's, assigned or not.
@@ -224,32 +238,40 @@ export const useStore = create<StoreState>((set, get) => ({
     return leads.some((l) => l.account === accountName && l.assignee === currentUserId);
   },
 
-  setCurrentUser: (repId) => set({ currentUserId: repId }),
-
-  // 1 account : 1 rep. Every contact at an account moves together.
+  // 1 location : 1 owner. Every contact at a location (account + city) moves
+  // together. Handing over the whole account hands over each of its
+  // locations; for an account in a single city that's the same thing.
   assignAccount: (accountName, repId) => {
+    const keys = new Set(get().leads.filter((l) => l.account === accountName).map((l) => locationKey(l.city)));
+    keys.forEach((k) => get().assignLocation(accountName, k, repId));
+  },
+
+  assignLocation: (accountName, cityKey, repId) => {
     set((state) => {
-      const contacts = state.leads.filter((l) => l.account === accountName);
+      const contacts = state.leads.filter((l) => l.account === accountName && locationKey(l.city) === cityKey);
       if (!contacts.length) return state;
       const prevOwnerId = contacts.find((c) => c.assignee)?.assignee || null;
       const newRep = repId ? repById(repId) : undefined;
       const prevRep = prevOwnerId ? repById(prevOwnerId) : undefined;
       const ownerChanged = (repId || null) !== prevOwnerId;
       const me = state.currentUser();
+      const multiCity = new Set(state.leads.filter((l) => l.account === accountName).map((l) => locationKey(l.city))).size > 1;
+      const what = multiCity ? `${accountName} · ${cityKey ? cityLabel(contacts[0].city) : "no city"}` : "Account";
       const txt = newRep
         ? prevRep
-          ? `Account reassigned from ${prevRep.name} to ${newRep.name} by ${me.name}.`
-          : `Account assigned to ${newRep.name} by ${me.name}.`
-        : `Account unassigned by ${me.name}.`;
+          ? `${what} reassigned from ${prevRep.name} to ${newRep.name} by ${me.name}.`
+          : `${what} assigned to ${newRep.name} by ${me.name}.`
+        : `${what} unassigned by ${me.name}.`;
+      const ids = new Set(contacts.map((c) => c.id));
       const leads = state.leads.map((l) => {
-        if (l.account !== accountName) return l;
+        if (!ids.has(l.id)) return l;
         return {
           ...l,
           assignee: repId || null,
-          // A genuinely new owner hasn't had a chance to work the account yet —
+          // A genuinely new owner hasn't had a chance to work the location yet —
           // the aging clock restarts so they aren't penalized for history before them.
           ownerSince: ownerChanged ? (repId ? isoToday() : null) : l.ownerSince,
-          activity: [activityEntry(me.name, txt), ...l.activity],
+          activity: ownerChanged ? [activityEntry(me.name, txt), ...l.activity] : l.activity,
         };
       });
       return { leads };
@@ -393,12 +415,13 @@ export const useStore = create<StoreState>((set, get) => ({
     const { existingOwner, assignee } = resolveNewContactOwner(
       state.leads,
       account,
+      input.city,
       state.currentUserId,
       state.isManager()
     );
     const noteBits = [`Added by ${me.name}.`];
     if (existingOwner && existingOwner !== state.currentUserId) {
-      noteBits.push(`Account already owned by ${repById(existingOwner)?.name} — kept with them.`);
+      noteBits.push(ownedNote(account, input.city, existingOwner));
     }
     if (input.notes) noteBits.push(`Note: ${input.notes}`);
 
@@ -457,13 +480,14 @@ export const useStore = create<StoreState>((set, get) => ({
       const { existingOwner, assignee } = resolveNewContactOwner(
         workingLeads,
         account,
+        r.city,
         state.currentUserId,
         state.isManager()
       );
       if (assignee === state.currentUserId && !state.isManager()) toOwnAccount++;
       const noteBits = [`Imported from ${sourceLabel} by ${me.name}.`];
       if (existingOwner && existingOwner !== state.currentUserId) {
-        noteBits.push(`Account already owned by ${repById(existingOwner)?.name} — kept with them.`);
+        noteBits.push(ownedNote(account, r.city, existingOwner));
       }
       if (r.notes) noteBits.push(`Note: ${r.notes}`);
       const emailQuality: EmailQuality = !r.email ? "none" : /^y/i.test(r.verified) ? "verified" : "catchall";
@@ -507,6 +531,10 @@ export const useStore = create<StoreState>((set, get) => ({
     return { count: newLeads.length, toOwnAccount };
   },
 
+  addLeads: (leads) => {
+    if (leads.length) set((s) => ({ leads: [...s.leads, ...leads] }));
+  },
+
   // Leads are the single source of truth — deleting the last contact at an
   // account makes that account disappear from Accounts too, since it's derived.
   deleteLead: (leadId) => {
@@ -519,6 +547,7 @@ export const useStore = create<StoreState>((set, get) => ({
           (c) => !(c.scope === "lead" && c.leadId === leadId)
         ),
         paymentReminders,
+        payments: Object.fromEntries(Object.entries(state.payments).filter(([, p]) => p.leadId !== leadId)),
       };
     });
   },
@@ -530,6 +559,7 @@ export const useStore = create<StoreState>((set, get) => ({
         Object.entries(state.paymentReminders).filter(([id]) => !removedIds.has(id))
       );
       return {
+        payments: Object.fromEntries(Object.entries(state.payments).filter(([, p]) => !removedIds.has(p.leadId))),
         leads: state.leads.filter((l) => !removedIds.has(l.id)),
         // Contact-level edit requests go too, or they'd linger as ghost approvals.
         changeRequests: state.changeRequests.filter((c) =>
@@ -605,6 +635,47 @@ export const useStore = create<StoreState>((set, get) => ({
     }));
   },
 
+  // Reps can mark debits on their own accounts; only a manager can undo one
+  // (the server enforces both).
+  markPaid: (leadId, billingDate) => {
+    const state = get();
+    const me = state.currentUser();
+    const lead = state.leads.find((l) => l.id === leadId);
+    if (!lead) return;
+    if (!state.isManager() && lead.assignee !== state.currentUserId) return;
+    const id = paymentId(leadId, billingDate);
+    if (state.payments[id]) return;
+    const amount = leadMrr(lead);
+    set((s) => ({
+      payments: { ...s.payments, [id]: { leadId, billingDate, amount, markedBy: me.id, paidOn: isoToday() } },
+      leads: s.leads.map((l) =>
+        l.id === leadId
+          ? {
+              ...l,
+              activity: [
+                activityEntry(me.name, `Payment received — ${fmtInr(amount)} for the ${fmtShortDate(billingDate)} debit.`),
+                ...l.activity,
+              ],
+            }
+          : l
+      ),
+    }));
+  },
+
+  saveDashboard: (widgets) => {
+    const id = get().currentUserId;
+    if (!id) return;
+    set((s) => ({ dashboards: { ...s.dashboards, [id]: { widgets: widgets.map(({ id: w, w: width, h }) => ({ id: w, w: width, h })) } } }));
+  },
+
+  unmarkPaid: (id) => {
+    const state = get();
+    if (!state.isManager() || !state.payments[id]) return;
+    const { [id]: _gone, ...payments } = state.payments;
+    void _gone;
+    set({ payments });
+  },
+
   setRepTarget: (repId, callsPerDay) => {
     set((s) => ({
       targets: { ...s.targets, [repId]: { callsPerDay: Math.max(0, callsPerDay || 0) } },
@@ -647,13 +718,12 @@ export const useStore = create<StoreState>((set, get) => ({
             .map((k) => EDITABLE_FIELDS.find((f) => f.key === k)?.label)
             .join(", ");
           updated.activity = [activityEntry(me.name, `${fields} updated.`), ...l.activity];
-          return updated;
+          return followLocationOwner(s.leads, l, updated, me.name);
         }),
       }));
     } else {
-      const nextSeq = state.crSeq + 1;
       const cr: LeadChangeRequest = {
-        id: "CR" + String(nextSeq).padStart(3, "0"),
+        id: newId("CR"),
         scope: "lead",
         leadId,
         requestedBy: state.currentUserId,
@@ -666,7 +736,6 @@ export const useStore = create<StoreState>((set, get) => ({
         .join(", ");
       set((s) => ({
         changeRequests: [...s.changeRequests, cr],
-        crSeq: nextSeq,
         leads: s.leads.map((l) =>
           l.id === leadId
             ? {
@@ -711,9 +780,8 @@ export const useStore = create<StoreState>((set, get) => ({
       }));
     } else {
       set((s) => {
-        const nextSeq = s.crSeq + 1;
         const cr: AccountChangeRequest = {
-          id: "CR" + String(nextSeq).padStart(3, "0"),
+          id: newId("CR"),
           scope: "account",
           accountName,
           requestedBy: s.currentUserId,
@@ -723,7 +791,6 @@ export const useStore = create<StoreState>((set, get) => ({
         };
         return {
           changeRequests: [...s.changeRequests, cr],
-          crSeq: nextSeq,
           leads: s.leads.map((l) =>
             l.account === accountName
               ? {
@@ -809,7 +876,7 @@ export const useStore = create<StoreState>((set, get) => ({
             });
           }
           updated.activity = [activityEntry(me.name, txt), ...l.activity];
-          return updated;
+          return followLocationOwner(s.leads, l, updated, me.name);
         }),
       }));
     }
@@ -829,16 +896,15 @@ export const useStore = create<StoreState>((set, get) => ({
       return false;
     }
     if (state.repLeaveOn(repId, date)) return false;
-    const nextSeq = state.lrSeq + 1;
     const req: LeaveRequest = {
-      id: "LR" + nextSeq,
+      id: newId("LR"),
       repId,
       date,
       reason,
       status: "pending",
       requestedAt: isoToday(),
     };
-    set((s) => ({ leaveRequests: [...s.leaveRequests, req], lrSeq: nextSeq }));
+    set((s) => ({ leaveRequests: [...s.leaveRequests, req] }));
     return true;
   },
 
@@ -853,9 +919,8 @@ export const useStore = create<StoreState>((set, get) => ({
         r.id === id ? { ...r, status: approve ? ("approved" as const) : ("rejected" as const), decidedBy, decidedAt } : r
       );
       if (!approve) return { leaveRequests };
-      const nextSeq = s.leaveSeq + 1;
-      const leave: RepLeave = { id: "LV" + nextSeq, repId: req.repId, date: req.date, reason: req.reason };
-      return { leaveRequests, leaveSeq: nextSeq, repLeaves: [...s.repLeaves, leave] };
+      const leave: RepLeave = { id: newId("LV"), repId: req.repId, date: req.date, reason: req.reason };
+      return { leaveRequests, repLeaves: [...s.repLeaves, leave] };
     });
   },
 

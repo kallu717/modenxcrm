@@ -1,5 +1,5 @@
-import { isoToday, daysUntil } from "./dates";
-import type { Plan, Lead } from "./types";
+import { isoToday, isoPlusDays } from "./dates";
+import type { Plan, Lead, PaymentRecord } from "./types";
 
 // A won deal is billed monthly at its plan rate through an auto-debit
 // mandate, so revenue accrues per month rather than landing once.
@@ -55,20 +55,87 @@ export function nextBillingDate(l: {
   return cand < start ? l.mandateDate : isoOfCand;
 }
 
-// Once a reminder's logged for a given debit date, that row drops off the
-// list — keyed by (lead, billing date) so it reappears automatically once
-// the mandate rolls to next month's date rather than staying dismissed forever.
+// How far back an unpaid debit stays on the list. Older ones are taken to be
+// settled outside the CRM (auto-debit mandates usually just go through).
+export const PAYMENT_LOOKBACK_DAYS = 30;
+
+const pad = (n: number) => String(n).padStart(2, "0");
+
+// Every monthly debit date of a won deal between two dates (inclusive), on
+// or after the mandate start, clamped for short months.
+export function billingDatesBetween(
+  l: { stage: string; plan: string | null; mandateDate: string | null },
+  fromIso: string,
+  toIso: string
+): string[] {
+  if (l.stage !== "won" || !l.plan || !l.mandateDate) return [];
+  const day = Number(l.mandateDate.slice(8, 10));
+  let y = Number(fromIso.slice(0, 4));
+  let m = Number(fromIso.slice(5, 7)) - 1;
+  const out: string[] = [];
+  for (let i = 0; i < 24; i++) {
+    const last = new Date(y, m + 1, 0).getDate();
+    const iso = `${y}-${pad(m + 1)}-${pad(Math.min(day, last))}`;
+    if (iso > toIso) break;
+    if (iso >= fromIso && iso >= l.mandateDate) out.push(iso);
+    m++;
+    if (m > 11) {
+      m = 0;
+      y++;
+    }
+  }
+  return out;
+}
+
+export function paymentId(leadId: string, billingDate: string): string {
+  return `${leadId}@${billingDate}`;
+}
+
+export interface DuePayment {
+  id: string;
+  lead: Lead;
+  date: string;
+  status: "overdue" | "today" | "upcoming";
+  reminded: boolean; // a reminder was logged for this debit
+}
+
+// Debits due in the next 7 days, plus any from the last 30 days nobody has
+// marked paid. Marking one paid takes it off; logging a reminder doesn't.
 export function duePayments(
   leads: Lead[],
-  paymentReminders: Record<string, string>
-): { lead: Lead; date: string }[] {
-  return leads
-    .map((l) => ({ lead: l, date: nextBillingDate(l) }))
-    .filter(
-      (x): x is { lead: Lead; date: string } =>
-        !!x.date && daysUntil(x.date) <= PAYMENT_WINDOW_DAYS && paymentReminders[x.lead.id] !== x.date
-    )
-    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : leadMrr(b.lead) - leadMrr(a.lead)));
+  payments: Record<string, PaymentRecord>,
+  paymentReminders: Record<string, string> = {}
+): DuePayment[] {
+  const today = isoToday();
+  const from = isoPlusDays(today, -PAYMENT_LOOKBACK_DAYS);
+  const to = isoPlusDays(today, PAYMENT_WINDOW_DAYS);
+  const out: DuePayment[] = [];
+  for (const lead of leads) {
+    for (const date of billingDatesBetween(lead, from, to)) {
+      const id = paymentId(lead.id, date);
+      if (payments[id]) continue;
+      const status = date < today ? "overdue" : date === today ? "today" : "upcoming";
+      out.push({ id, lead, date, status, reminded: paymentReminders[lead.id] === date });
+    }
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : leadMrr(b.lead) - leadMrr(a.lead)));
+}
+
+// Money marked as received with a debit date in this calendar month.
+export function collectedThisMonth(payments: Record<string, PaymentRecord>): number {
+  const month = isoToday().slice(0, 7);
+  return Object.values(payments)
+    .filter((p) => p.billingDate.startsWith(month))
+    .reduce((sum, p) => sum + (p.amount || 0), 0);
+}
+
+// What won deals bill this calendar month, paid or not.
+export function billedThisMonth(leads: Lead[]): number {
+  const today = isoToday();
+  const first = today.slice(0, 8) + "01";
+  const [y, m] = [Number(today.slice(0, 4)), Number(today.slice(5, 7))];
+  const last = `${today.slice(0, 8)}${pad(new Date(y, m, 0).getDate())}`;
+  return leads.reduce((sum, l) => sum + leadMrr(l) * billingDatesBetween(l, first, last).length, 0);
 }
 
 export const Q_MONTHS: [string, string][] = [
@@ -168,4 +235,25 @@ export function agingBucket(days: number | null): { label: string; cls: string }
   if (days >= 60) return { label: "60–89 days", cls: "warn" };
   if (days >= 30) return { label: "30–59 days", cls: "caution" };
   return { label: "0–29 days", cls: "ok" };
+}
+
+// What won deals billed in each of the last `months` calendar months
+// (this month included), oldest first.
+export function revenueByMonth(leads: Lead[], months = 6): { month: string; label: string; amount: number }[] {
+  const today = isoToday();
+  let y = Number(today.slice(0, 4));
+  let m = Number(today.slice(5, 7)) - 1;
+  const out: { month: string; label: string; amount: number }[] = [];
+  for (let i = 0; i < months; i++) {
+    const first = `${y}-${pad(m + 1)}-01`;
+    const last = `${y}-${pad(m + 1)}-${pad(new Date(y, m + 1, 0).getDate())}`;
+    const amount = leads.reduce((sum, l) => sum + leadMrr(l) * billingDatesBetween(l, first, last).length, 0);
+    out.unshift({ month: first.slice(0, 7), label: new Date(y, m, 1).toLocaleDateString("en-IN", { month: "short" }), amount });
+    m--;
+    if (m < 0) {
+      m = 11;
+      y--;
+    }
+  }
+  return out;
 }

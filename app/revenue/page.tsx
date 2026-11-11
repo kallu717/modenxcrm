@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
-import { repsList, repById } from "@/lib/constants";
+import { sellersList, repById } from "@/lib/constants";
 import { needsRevenueDetails } from "@/lib/revenue";
 import {
   PLANS,
@@ -52,7 +52,7 @@ export default function RevenuePage() {
   const trend = quarters.map((x) => ({ ...x, rev: quarterRevenue(subs, x.y, x.q) }));
   const maxRev = Math.max(1, ...trend.map((t) => t.rev));
 
-  const byRep = repsList()
+  const byRep = sellersList(leads)
     .map((r) => {
       const mine = subs.filter((l) => l.assignee === r.id);
       const repMrr = mine.reduce((s, l) => s + leadMrr(l), 0);

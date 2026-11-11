@@ -1,17 +1,33 @@
 "use client";
 
-import { use, useMemo, useState } from "react";
+import { Suspense, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useStore } from "@/lib/store";
-import { EMPTY_FILTERS, filterLeads, type FilterState } from "@/lib/filters";
+import { EMPTY_FILTERS, filterLeads, parseFilters, type FilterState } from "@/lib/filters";
+import { pageSlice } from "@/lib/paging";
+import { usePaging } from "@/lib/usePaging";
+import { useSessionState } from "@/lib/useSessionState";
+import Pager from "@/components/Pager";
 import FilterBar from "@/components/FilterBar";
 import StatsHeader from "@/components/StatsHeader";
 import LeadsTable from "@/components/LeadsTable";
 import NewLeadModal from "@/components/NewLeadModal";
 import ImportModal from "@/components/ImportModal";
 
-export default function LeadsPage({ searchParams }: PageProps<"/leads">) {
-  const { assignee } = use(searchParams);
-  const assigneeParam = typeof assignee === "string" ? assignee : "";
+// Pages here are built ahead of time, before anyone opens a link, so the
+// address's ?query is read in the browser with useSearchParams, inside
+// <Suspense>. Reading the page's searchParams prop instead worked in
+// development but came through empty in production builds.
+export default function LeadsPage() {
+  return (
+    <Suspense fallback={null}>
+      <LeadsView />
+    </Suspense>
+  );
+}
+
+function LeadsView() {
+  const assigneeParam = useSearchParams().get("assignee") ?? "";
   const leads = useStore((s) => s.leads);
   const isManager = useStore((s) => s.isManager());
   const currentUserId = useStore((s) => s.currentUserId);
@@ -19,7 +35,16 @@ export default function LeadsPage({ searchParams }: PageProps<"/leads">) {
     () => (isManager ? leads : leads.filter((l) => l.assignee === currentUserId)),
     [leads, isManager, currentUserId]
   );
-  const [filters, setFilters] = useState<FilterState>({ ...EMPTY_FILTERS, assignee: assigneeParam });
+  // Filters and page are remembered for the session, per person, so coming
+  // back to Leads shows the same view. A link with ?assignee= still wins.
+  const [filters, setFilters] = useSessionState<FilterState>(
+    `modenx:${currentUserId}:leads:filters`,
+    { ...EMPTY_FILTERS, assignee: assigneeParam },
+    (raw) => {
+      const f = parseFilters(raw);
+      return f && assigneeParam ? { ...f, assignee: assigneeParam } : f;
+    }
+  );
 
   // The "unassigned" pill links here while this page may already be open.
   const [seenParam, setSeenParam] = useState(assigneeParam);
@@ -35,6 +60,13 @@ export default function LeadsPage({ searchParams }: PageProps<"/leads">) {
     [visibleLeads]
   );
   const filtered = useMemo(() => filterLeads(visibleLeads, filters), [visibleLeads, filters]);
+  const paging = usePaging(`modenx:${currentUserId}:leads:paging`, filtered.length, JSON.stringify(filters));
+  const shown = useMemo(() => pageSlice(filtered, paging.page, paging.size), [filtered, paging.page, paging.size]);
+  const listTop = useRef<HTMLDivElement>(null);
+  const goToPage = (p: number) => {
+    paging.setPage(p);
+    listTop.current?.scrollIntoView({ block: "start" });
+  };
 
   return (
     <div className="py-5">
@@ -78,7 +110,17 @@ export default function LeadsPage({ searchParams }: PageProps<"/leads">) {
 
       <FilterBar value={filters} onChange={setFilters} cities={cities} />
 
-      <LeadsTable leads={filtered} />
+      <div ref={listTop} className="scroll-mt-24">
+        <LeadsTable leads={shown} />
+      </div>
+      <Pager
+        page={paging.page}
+        size={paging.size}
+        total={filtered.length}
+        noun={["lead", "leads"]}
+        onPage={goToPage}
+        onSize={paging.setSize}
+      />
 
       {showNewLead && <NewLeadModal onClose={() => setShowNewLead(false)} />}
       {showImport && <ImportModal onClose={() => setShowImport(false)} />}

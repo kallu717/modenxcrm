@@ -1,4 +1,13 @@
-export type Role = "Rep" | "Manager";
+// "Pending" is signed in but not yet given a role by an Admin. Admins can do
+// everything a Manager can, plus assign roles. The server enforces all of it.
+export type Role = "Pending" | "Rep" | "Manager" | "Admin";
+
+export const ROLE_LABELS: Record<Role, string> = {
+  Pending: "No access",
+  Rep: "Sales Rep",
+  Manager: "Manager",
+  Admin: "Admin",
+};
 
 export interface Rep {
   id: string;
@@ -74,6 +83,16 @@ export interface Lead {
   nextFollowup: string | null;
   meetings: Meeting[];
   activity: ActivityEntry[];
+}
+
+// A monthly debit someone confirmed as received. Keyed "<lead id>@<billing
+// date>". The server fills in markedBy and paidOn.
+export interface PaymentRecord {
+  leadId: string;
+  billingDate: string;
+  amount: number;
+  markedBy?: string;
+  paidOn?: string;
 }
 
 export interface Plan {

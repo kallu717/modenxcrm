@@ -16,30 +16,158 @@
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
 }
 
+/* Themes. Each person picks one under their name (top right); the choice
+   sits on <html data-theme="…"> and is remembered in this browser. With no
+   choice the app follows the device: Sage by day, Forest in dark mode.
+   The same selectors let the theme picker preview a theme on a small card. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme]) {
     --bg: #111310; --surface: #1a1c18; --surface-2: #232520;
     --ink: #f3f2ea; --ink-2: #c2c0b3; --muted: #8f8d80;
     --grid: #2c2e28; --rule: #3a3c34; --border: rgba(243, 242, 234, .10);
-    --accent: #3fae91; --accent-soft: rgba(63, 174, 145, .14); --accent-ink: #7fd4bb;
+    --accent: #3fae91; --accent-soft: rgba(63, 174, 145, .15); --accent-ink: #7fd4bb;
     --good: #3fae57; --good-soft: rgba(63, 174, 87, .14);
     --warn: #d99a30; --warn-soft: rgba(217, 154, 48, .15);
     --crit: #e05c5c; --crit-soft: rgba(224, 92, 92, .15);
     --p-hot: #e05c5c; --p-warm: #d99a30; --p-nurture: #3fae91; --p-low: #8f8d80;
     --shadow: 0 1px 2px rgba(0, 0, 0, .4); --shadow-lg: 0 16px 40px rgba(0, 0, 0, .5);
+    color-scheme: dark;
   }
 }
 
-:root[data-theme="dark"] {
+[data-theme="sage"] {
+  --bg: #f5f4ef; --surface: #ffffff; --surface-2: #ebeae2;
+  --ink: #17160f; --ink-2: #57564c; --muted: #8f8d80;
+  --grid: #dedcd0; --rule: #c7c4b3; --border: rgba(23, 22, 15, .10);
+  --accent: #1f6f5c; --accent-soft: rgba(31, 111, 92, .11); --accent-ink: #0f4c3d;
+  --good: #1f8a3d; --good-soft: rgba(31, 138, 61, .12);
+  --warn: #b9791a; --warn-soft: rgba(185, 121, 26, .13);
+  --crit: #c23b3b; --crit-soft: rgba(194, 59, 59, .12);
+  --p-hot: #c23b3b; --p-warm: #b9791a; --p-nurture: #1f6f5c; --p-low: #8f8d80;
+  --shadow: 0 1px 2px rgba(23, 22, 15, .06), 0 1px 1px rgba(23, 22, 15, .04);
+  --shadow-lg: 0 12px 32px rgba(23, 22, 15, .16);
+  color-scheme: light;
+}
+
+[data-theme="ocean"] {
+  --bg: #f2f5f9; --surface: #ffffff; --surface-2: #e4eaf2;
+  --ink: #0f1722; --ink-2: #4a5568; --muted: #8a94a6;
+  --grid: #d9e0ea; --rule: #bfc9d8; --border: rgba(23, 22, 15, .10);
+  --accent: #1f5fbf; --accent-soft: rgba(31, 95, 191, .11); --accent-ink: #123e80;
+  --good: #1f8a3d; --good-soft: rgba(31, 138, 61, .12);
+  --warn: #b9791a; --warn-soft: rgba(185, 121, 26, .13);
+  --crit: #c23b3b; --crit-soft: rgba(194, 59, 59, .12);
+  --p-hot: #c23b3b; --p-warm: #b9791a; --p-nurture: #1f5fbf; --p-low: #8a94a6;
+  --shadow: 0 1px 2px rgba(23, 22, 15, .06), 0 1px 1px rgba(23, 22, 15, .04);
+  --shadow-lg: 0 12px 32px rgba(23, 22, 15, .16);
+  color-scheme: light;
+}
+
+[data-theme="plum"] {
+  --bg: #f6f3f7; --surface: #ffffff; --surface-2: #ece6ef;
+  --ink: #1b1320; --ink-2: #5a4f60; --muted: #958a9b;
+  --grid: #e2dae6; --rule: #cbbfd1; --border: rgba(23, 22, 15, .10);
+  --accent: #7a3e9d; --accent-soft: rgba(122, 62, 157, .11); --accent-ink: #52246c;
+  --good: #1f8a3d; --good-soft: rgba(31, 138, 61, .12);
+  --warn: #b9791a; --warn-soft: rgba(185, 121, 26, .13);
+  --crit: #c23b3b; --crit-soft: rgba(194, 59, 59, .12);
+  --p-hot: #c23b3b; --p-warm: #b9791a; --p-nurture: #7a3e9d; --p-low: #958a9b;
+  --shadow: 0 1px 2px rgba(23, 22, 15, .06), 0 1px 1px rgba(23, 22, 15, .04);
+  --shadow-lg: 0 12px 32px rgba(23, 22, 15, .16);
+  color-scheme: light;
+}
+
+[data-theme="terracotta"] {
+  --bg: #faf5ef; --surface: #ffffff; --surface-2: #f1e8dd;
+  --ink: #21170f; --ink-2: #5e4d3f; --muted: #9a8a7b;
+  --grid: #eadfd2; --rule: #d6c6b4; --border: rgba(23, 22, 15, .10);
+  --accent: #b4532a; --accent-soft: rgba(180, 83, 42, .11); --accent-ink: #7a3415;
+  --good: #1f8a3d; --good-soft: rgba(31, 138, 61, .12);
+  --warn: #b9791a; --warn-soft: rgba(185, 121, 26, .13);
+  --crit: #c23b3b; --crit-soft: rgba(194, 59, 59, .12);
+  --p-hot: #c23b3b; --p-warm: #b9791a; --p-nurture: #b4532a; --p-low: #9a8a7b;
+  --shadow: 0 1px 2px rgba(23, 22, 15, .06), 0 1px 1px rgba(23, 22, 15, .04);
+  --shadow-lg: 0 12px 32px rgba(23, 22, 15, .16);
+  color-scheme: light;
+}
+
+[data-theme="slate"] {
+  --bg: #f4f5f7; --surface: #ffffff; --surface-2: #e7e9ee;
+  --ink: #14161c; --ink-2: #4f5563; --muted: #8b919e;
+  --grid: #dcdfe6; --rule: #c3c8d2; --border: rgba(23, 22, 15, .10);
+  --accent: #4b52c9; --accent-soft: rgba(75, 82, 201, .11); --accent-ink: #2e3393;
+  --good: #1f8a3d; --good-soft: rgba(31, 138, 61, .12);
+  --warn: #b9791a; --warn-soft: rgba(185, 121, 26, .13);
+  --crit: #c23b3b; --crit-soft: rgba(194, 59, 59, .12);
+  --p-hot: #c23b3b; --p-warm: #b9791a; --p-nurture: #4b52c9; --p-low: #8b919e;
+  --shadow: 0 1px 2px rgba(23, 22, 15, .06), 0 1px 1px rgba(23, 22, 15, .04);
+  --shadow-lg: 0 12px 32px rgba(23, 22, 15, .16);
+  color-scheme: light;
+}
+
+[data-theme="forest"] {
   --bg: #111310; --surface: #1a1c18; --surface-2: #232520;
   --ink: #f3f2ea; --ink-2: #c2c0b3; --muted: #8f8d80;
   --grid: #2c2e28; --rule: #3a3c34; --border: rgba(243, 242, 234, .10);
-  --accent: #3fae91; --accent-soft: rgba(63, 174, 145, .14); --accent-ink: #7fd4bb;
+  --accent: #3fae91; --accent-soft: rgba(63, 174, 145, .15); --accent-ink: #7fd4bb;
   --good: #3fae57; --good-soft: rgba(63, 174, 87, .14);
   --warn: #d99a30; --warn-soft: rgba(217, 154, 48, .15);
   --crit: #e05c5c; --crit-soft: rgba(224, 92, 92, .15);
   --p-hot: #e05c5c; --p-warm: #d99a30; --p-nurture: #3fae91; --p-low: #8f8d80;
   --shadow: 0 1px 2px rgba(0, 0, 0, .4); --shadow-lg: 0 16px 40px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+
+[data-theme="midnight"] {
+  --bg: #0d1220; --surface: #151c2e; --surface-2: #1d2539;
+  --ink: #eef2fa; --ink-2: #b8c1d6; --muted: #7d879d;
+  --grid: #263049; --rule: #323d58; --border: rgba(243, 242, 234, .10);
+  --accent: #5b9cf5; --accent-soft: rgba(91, 156, 245, .15); --accent-ink: #a5c8fb;
+  --good: #3fae57; --good-soft: rgba(63, 174, 87, .14);
+  --warn: #d99a30; --warn-soft: rgba(217, 154, 48, .15);
+  --crit: #e05c5c; --crit-soft: rgba(224, 92, 92, .15);
+  --p-hot: #e05c5c; --p-warm: #d99a30; --p-nurture: #5b9cf5; --p-low: #7d879d;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4); --shadow-lg: 0 16px 40px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+
+[data-theme="graphite"] {
+  --bg: #121212; --surface: #1c1c1c; --surface-2: #262626;
+  --ink: #f2f2f2; --ink-2: #c4c4c4; --muted: #8c8c8c;
+  --grid: #2e2e2e; --rule: #3b3b3b; --border: rgba(243, 242, 234, .10);
+  --accent: #e0a53c; --accent-soft: rgba(224, 165, 60, .15); --accent-ink: #f0cb85;
+  --good: #3fae57; --good-soft: rgba(63, 174, 87, .14);
+  --warn: #d99a30; --warn-soft: rgba(217, 154, 48, .15);
+  --crit: #e05c5c; --crit-soft: rgba(224, 92, 92, .15);
+  --p-hot: #e05c5c; --p-warm: #d99a30; --p-nurture: #e0a53c; --p-low: #8c8c8c;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4); --shadow-lg: 0 16px 40px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+
+[data-theme="aubergine"] {
+  --bg: #160f1a; --surface: #211726; --surface-2: #2b1f31;
+  --ink: #f5eef8; --ink-2: #cdbfd4; --muted: #9888a0;
+  --grid: #33263a; --rule: #433349; --border: rgba(243, 242, 234, .10);
+  --accent: #d36ba6; --accent-soft: rgba(211, 107, 166, .15); --accent-ink: #ecaacf;
+  --good: #3fae57; --good-soft: rgba(63, 174, 87, .14);
+  --warn: #d99a30; --warn-soft: rgba(217, 154, 48, .15);
+  --crit: #e05c5c; --crit-soft: rgba(224, 92, 92, .15);
+  --p-hot: #e05c5c; --p-warm: #d99a30; --p-nurture: #d36ba6; --p-low: #9888a0;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4); --shadow-lg: 0 16px 40px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+
+[data-theme="deep-sea"] {
+  --bg: #0a1517; --surface: #112023; --surface-2: #182a2e;
+  --ink: #e9f6f6; --ink-2: #b3cfd1; --muted: #7c9a9d;
+  --grid: #203538; --rule: #2b4448; --border: rgba(243, 242, 234, .10);
+  --accent: #33c3c9; --accent-soft: rgba(51, 195, 201, .15); --accent-ink: #93e3e6;
+  --good: #3fae57; --good-soft: rgba(63, 174, 87, .14);
+  --warn: #d99a30; --warn-soft: rgba(217, 154, 48, .15);
+  --crit: #e05c5c; --crit-soft: rgba(224, 92, 92, .15);
+  --p-hot: #e05c5c; --p-warm: #d99a30; --p-nurture: #33c3c9; --p-low: #7c9a9d;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4); --shadow-lg: 0 16px 40px rgba(0, 0, 0, .5);
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -87,4 +215,22 @@ button, input, select {
   font-family: inherit;
   font-size: inherit;
   color: inherit;
+}
+
+/* Dashboard grid (components/dashboard/DashboardGrid.tsx): 12 columns, each
+   widget spans --w columns and --h rows. Phones get one full-width column. */
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-flow: row dense;
+}
+.dash-item {
+  grid-column: span 12;
+  grid-row: span var(--h);
+  min-width: 0;
+}
+@media (min-width: 768px) {
+  .dash-item {
+    grid-column: span var(--w);
+  }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useStore } from "@/lib/store";
-import { STAGES, repsList } from "@/lib/constants";
+import { STAGES, assignableList } from "@/lib/constants";
 import { EMPTY_FILTERS, type FilterState } from "@/lib/filters";
 
 const selectClass =
@@ -18,7 +18,7 @@ export default function FilterBar({
   cities: string[];
 }) {
   const isManager = useStore((s) => s.isManager());
-  const reps = repsList();
+  const reps = assignableList();
 
   const set = <K extends keyof FilterState>(key: K, v: FilterState[K]) =>
     onChange({ ...value, [key]: v });
@@ -95,7 +95,7 @@ export default function FilterBar({
           value={value.assignee}
           onChange={(e) => set("assignee", e.target.value)}
         >
-          <option value="">All reps</option>
+          <option value="">Everyone</option>
           {reps.map((r) => (
             <option key={r.id} value={r.id}>
               {r.name}

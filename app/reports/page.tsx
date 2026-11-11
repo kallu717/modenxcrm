@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
-import { STAGES, repsList } from "@/lib/constants";
+import { STAGES, assignableList, sellersList } from "@/lib/constants";
 import { RANGE_PRESETS, rangeForPreset, workingRangeForRep } from "@/lib/calendar";
 import { computeRepStats, computeFunnel, computeStageAging } from "@/lib/reports";
-import { buildAccounts } from "@/lib/accounts";
+import Link from "next/link";
+import { accountHref, buildAccounts } from "@/lib/accounts";
 import { fmtShortDate } from "@/lib/dates";
 import { agingBucket, AGING_MAX_DAYS } from "@/lib/revenue";
 import type { DateRange } from "@/lib/types";
@@ -31,7 +32,7 @@ export default function ReportsPage() {
   const repLeaves = useStore((s) => s.repLeaves);
   const targets = useStore((s) => s.targets);
   const setRepTarget = useStore((s) => s.setRepTarget);
-  const assignAccount = useStore((s) => s.assignAccount);
+  const assignLocation = useStore((s) => s.assignLocation);
 
   const [rangePreset, setRangePreset] = useState("30d");
   const [customFrom, setCustomFrom] = useState<string | null>(null);
@@ -43,7 +44,8 @@ export default function ReportsPage() {
     () => rangeForPreset(rangePreset, customFrom, customTo),
     [rangePreset, customFrom, customTo]
   );
-  const reps = useMemo(() => repsList(), []);
+  // Every rep, plus managers who own accounts: their selling counts too.
+  const reps = useMemo(() => sellersList(leads), [leads]);
 
   const rangeLabelLower = useMemo(() => {
     const p = RANGE_PRESETS.find((x) => x.id === rangePreset);
@@ -66,8 +68,21 @@ export default function ReportsPage() {
     [repStats]
   );
 
+  // One row per location (account + city): each city has its own owner, so
+  // each can be stuck, and reassigned, on its own.
   const accountAging = useMemo(() => {
     return buildAccounts(leads)
+      .flatMap((a) =>
+        a.locations.map((l) => ({
+          key: `${a.name}|${l.key}`,
+          account: a.name,
+          cityKey: l.key,
+          name: a.locations.length > 1 ? `${a.name} · ${l.city}` : a.name,
+          owner: l.owner,
+          furthest: l.furthest,
+          agingDays: l.agingDays,
+        }))
+      )
       .filter((a) => a.agingDays != null)
       .filter((a) => agingFilter === "all" || (a.agingDays ?? 0) >= 60)
       .sort((a, b) => (b.agingDays ?? 0) - (a.agingDays ?? 0));
@@ -422,19 +437,23 @@ export default function ReportsPage() {
                 const style = bucket ? AGING_STYLE[bucket.cls] : null;
                 const stage = STAGES.find((s) => s.id === a.furthest);
                 return (
-                  <tr key={a.name} style={{ borderBottom: "1px solid var(--grid)" }}>
-                    <td className="py-1.5 px-2" style={tdStyle}>{a.name}</td>
+                  <tr key={a.key} style={{ borderBottom: "1px solid var(--grid)" }}>
+                    <td className="py-1.5 px-2" style={tdStyle}>
+                      <Link href={accountHref(a.account)} className="hover:underline" style={{ color: "var(--ink)" }}>
+                        {a.name}
+                      </Link>
+                    </td>
                     <td className="py-1.5 px-2">
                       <select
                         aria-label={`Reassign ${a.name}`}
                         value={a.owner || ""}
-                        onChange={(e) => assignAccount(a.name, e.target.value || null)}
+                        onChange={(e) => assignLocation(a.account, a.cityKey, e.target.value || null)}
                         className="px-2 py-1 rounded-md text-[12px] border"
                         style={{ borderColor: "var(--grid)", background: "var(--surface)", color: "var(--ink)" }}
                       >
                         <option value="">Unassigned</option>
-                        {reps.map((r) => (
-                          <option key={r.id} value={r.id}>{r.name}</option>
+                        {assignableList().map((r) => (
+                          <option key={r.id} value={r.id}>{r.name}{r.role === "Manager" ? " (manager)" : ""}</option>
                         ))}
                       </select>
                     </td>

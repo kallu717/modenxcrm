@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
+import { accountHref } from "@/lib/accounts";
 import { STAGES, PRIORITIES, MEETING_MODES, CONTACT_METHODS, repById } from "@/lib/constants";
 import { effectivePriority, bandForScore } from "@/lib/scoring";
 import { fmtShortDate, fmtFollowup, followupBucket, isoToday, isoPlusDays, nextWeekday } from "@/lib/dates";
@@ -307,8 +308,8 @@ export default function LeadDrawer({ leadId, onClose }: { leadId: string; onClos
               <span style={{ color: "var(--muted)", fontStyle: "italic" }}>Unassigned</span>
             )}
             {isManager && (
-              <Link href={`/accounts?account=${encodeURIComponent(lead.account)}`} className="underline" style={{ color: "var(--accent-ink)" }}>
-                manage in Accounts
+              <Link href={accountHref(lead.account)} className="underline" style={{ color: "var(--accent-ink)" }}>
+                open account
               </Link>
             )}
           </div>
