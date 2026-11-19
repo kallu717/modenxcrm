@@ -57,7 +57,9 @@ def newhire():
 
 
 ROW = {"name": "Ananya Sharma", "title": "Marketing Head", "account": "Studio Weft", "type": "Brand",
-       "email": "ananya@studioweft.com", "verified": "Yes", "phone": "+91 9812345678", "city": "Bengaluru"}
+       "email": "ananya@studioweft.com", "verified": "Yes", "phone": "", "city": "Bengaluru"}
+# No phone in ROW: phone numbers are a duplicate key, and many tests copy ROW
+# with a new email. The phone rules are tested in test_phone.py.
 
 
 def import_rows(client, rows, **params):

@@ -104,7 +104,7 @@ describe("H. Spreadsheet import", () => {
   });
 
   it("H6 messy header spacing and case", () => {
-    const r = { "  contact NAME ": "Ananya", "JOB TITLE": "Owner", "account name": "X Co", "Account Type": "Store" };
+    const r = { "  contact NAME ": "Ananya", "JOB TITLE": "Owner", "account name": "X Co", "Account Type": "Store", " EMAIL ": "a@xco.in" };
     expect(stageImport([r], "x", existing).rows).toHaveLength(1);
   });
 

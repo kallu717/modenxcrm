@@ -5,6 +5,7 @@ import { useStore } from "@/lib/store";
 import { CITIES, repById } from "@/lib/constants";
 import { locationKey } from "@/lib/accounts";
 import { api, describeError } from "@/lib/api";
+import { EMAIL_RE, PHONE_RULE, phoneDigits } from "@/lib/phone";
 import { adoptLeads } from "@/lib/sync";
 import type { AccountType } from "@/lib/types";
 
@@ -50,18 +51,30 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
 
   const submit = async () => {
     if (busy) return;
-    const required = ["name", "title", "account", "type", "email", "city"] as const;
-    const missing = required.filter((k) => !form[k]);
+    const required = ["name", "title", "account", "type", "city"] as const;
+    const missing = required.filter((k) => !form[k].trim());
     if (missing.length) {
       setError("Fill in all required fields.");
       return;
     }
-    if (!/^\S+@\S+\.\S+$/.test(form.email)) {
+    const email = form.email.trim();
+    const rawPhone = form.phone.trim();
+    if (!email && !rawPhone) {
+      setError("Add an email or a phone number (or both).");
+      return;
+    }
+    if (email && !EMAIL_RE.test(email)) {
       setError("That email doesn't look right.");
       return;
     }
+    const phone = rawPhone ? phoneDigits(rawPhone) : "";
+    if (phone === null) {
+      setError(`Phone ${PHONE_RULE}.`);
+      return;
+    }
     // The server picks the id, joins an existing account and its owner, and
-    // checks the email against everyone's leads, including ones you can't see.
+    // checks the email and phone against everyone's leads, including ones you
+    // can't see.
     setBusy(true);
     let lead;
     try {
@@ -70,8 +83,8 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
         title: form.title,
         account: form.account,
         type: existingAccount ? existingAccount.type : form.type,
-        email: form.email,
-        phone: form.phone,
+        email,
+        phone,
         city: form.city,
         notes: form.notes,
         verified: form.verified ? "Yes" : "No",
@@ -103,7 +116,7 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
           New lead
         </h3>
         <p className="text-[12.5px] mt-1" style={{ color: "var(--muted)" }}>
-          Everything except phone is required. If the account already exists, this contact joins
+          Fields marked * are required, and at least one of the two marked † (email or phone). If the account already exists, this contact joins
           whoever owns its city there.
         </p>
 
@@ -192,7 +205,7 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <label className="block text-[11px] mb-1" style={{ color: "var(--muted)" }}>
-              Email *
+              Email †
             </label>
             <input
               type="email"
@@ -204,11 +217,12 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <label className="block text-[11px] mb-1" style={{ color: "var(--muted)" }}>
-              Phone
+              Phone †
             </label>
             <input
               value={form.phone}
-              placeholder="Optional"
+              inputMode="tel"
+              placeholder="10 digits"
               onChange={(e) => set("phone", e.target.value)}
               className="w-full px-2.5 py-1.5 rounded-md text-[13px] border"
               style={inputStyle}

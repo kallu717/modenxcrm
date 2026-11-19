@@ -220,6 +220,24 @@ A location is a city within an account. One owner per location; an account in on
 | WIDGET-18 | | Phone width | One full-width column, no sideways scroll | UI |
 | WIDGET-19 | | Server and screens agree on the widget list | Files identical | FE WIDGET9, BE `test_server_and_screens_share_the_same_widget_list` |
 
+### 2.12 Email or phone (PHONE)
+
+Every contact needs an email or a phone (or both). Phones are 10 digits (a +91 or a leading 0 is dropped) and, like emails, one number belongs to one lead.
+
+| ID | | Do | Expect | How |
+|---|---|---|---|---|
+| PHONE-01 | | Import a row with an email and no phone | Imported | FE PH2, BE `test_PH1_email_only_imports`, UI |
+| PHONE-02 | | Import a row with a phone and no email | Imported, phone saved as 10 digits | FE PH3, BE `test_PH2_phone_only_imports_and_is_saved_as_10_digits`, UI |
+| PHONE-03 | ✗ | Import a row with neither | Refused: "needs an email or a phone number" | FE PH4, BE `test_PH3_neither_email_nor_phone_is_refused`, UI |
+| PHONE-04 | ✗ | Phone with too few or too many digits, or letters | Refused: "must be 10 digits" | FE PH1, PH5, BE `test_phone_rule`, `test_PH4_phone_must_be_10_digits`, UI |
+| PHONE-05 | ✗ | Import a phone already in the CRM (any format, any owner) | Skipped as a duplicate | FE PH6, BE `test_PH5_duplicate_phone_is_skipped_across_reps_and_formats`, UI |
+| PHONE-06 | ✗ | Same phone twice in one sheet | Only the first is imported | FE PH7, BE `test_PH6_duplicate_phone_inside_one_sheet` |
+| PHONE-07 | | New lead form with only a phone | Added | BE `test_PH7_new_lead_form_takes_phone_only_but_not_neither`, UI |
+| PHONE-08 | ✗ | New lead form with neither, a short phone, or a taken phone | Refused with the reason | BE `test_PH7_new_lead_form_takes_phone_only_but_not_neither`, UI |
+| PHONE-09 | ✗ | Edit a lead's phone to one another lead has | Refused (screen, and 409 from the server) | FE PH9, BE `test_PH8_editing_to_a_taken_phone_is_a_409` |
+| PHONE-10 | ✗ | Edit a phone to a bad number, or remove a lead's only email/phone | Refused (422) | FE PH10, BE `test_PH9_editing_to_a_bad_phone_or_to_nothing_is_refused` |
+| PHONE-11 | | Saved leads from before the rule | Upgrade never fails; an old number that doesn't fit, or an older twin, gets no duplicate key and the lead still saves | BE `test_saved_phones_get_their_duplicate_key_and_old_twins_never_block_the_upgrade`, `test_PH11_unchanged_old_style_phone_does_not_block_other_edits` |
+
 ## 3. Regression (REG): must keep working
 
 ### 3.1 Sign-in, roles, settings (AUTH)

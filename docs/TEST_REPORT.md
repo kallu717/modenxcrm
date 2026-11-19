@@ -3,7 +3,7 @@
 Branch `feature/location-assignment` (city ownership, managers as owners, merged
 city spellings, account page, pages on Leads and Accounts, Dashboard, Mark paid,
 themes, bulk account actions, new name, logo, your own dashboard). Plan:
-[TEST_PLAN.md](TEST_PLAN.md), 189 planned cases, 78 of them negative.
+[TEST_PLAN.md](TEST_PLAN.md), 200 planned cases, 85 of them negative.
 
 ## Summary
 

@@ -116,6 +116,14 @@ export function describeError(e: unknown): string {
       return "Someone else changed this lead a moment ago. Their version is shown now.";
     case "duplicate_email":
       return "Another lead already has that email.";
+    case "duplicate_phone":
+      return "Another lead already has that phone number.";
+    case "bad_phone":
+      return "Phone numbers must be 10 digits.";
+    case "bad_email":
+      return "That email doesn't look right.";
+    case "needs_email_or_phone":
+      return "A lead needs an email or a phone number.";
     case "account_name_taken":
       return `Another account is already named ${typeof d === "object" && d?.account}.`;
     case "location_has_two_owners": {
@@ -128,7 +136,9 @@ export function describeError(e: unknown): string {
       return "That change needs a manager's approval.";
     case "invalid_lead": {
       const issue = (typeof d === "object" && d?.issues?.[0]) || "";
-      if (issue.includes("already exists")) return "A lead with that email already exists.";
+      if (issue.includes("already exists")) {
+        return /: phone \d/.test(issue) ? "A lead with that phone number already exists." : "A lead with that email already exists.";
+      }
       return issue.replace(/^Row \d+: /, "") || "That lead couldn't be saved.";
     }
     case "not_found":

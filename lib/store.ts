@@ -4,6 +4,7 @@ import { scoreLead, bandForScore } from "./scoring";
 import { PLANS, fmtInr, leadMrr, paymentId } from "./revenue";
 import { STAGES, EDITABLE_FIELDS, ACCOUNT_EDITABLE_FIELDS, repById } from "./constants";
 import { newId } from "./ids";
+import { EMAIL_RE, PHONE_RULE, phoneDigits, phoneKey } from "./phone";
 import { cityLabel, locationKey } from "./accounts";
 import type { ImportRow } from "./import";
 import type { SavedDashboard, WidgetPlacement } from "./widgets";
@@ -51,6 +52,30 @@ function accountNameTaken(leads: Lead[], name: string, except: string): boolean 
 function emailTaken(leads: Lead[], email: string, exceptLeadId: string): boolean {
   const e = email.trim().toLowerCase();
   return !!e && leads.some((l) => l.id !== exceptLeadId && (l.email || "").toLowerCase() === e);
+}
+
+// Phone numbers are a duplicate key too, matched on their 10 digits.
+function phoneTaken(leads: Lead[], phone: string, exceptLeadId: string): boolean {
+  const p = phoneKey(phone);
+  return !!p && leads.some((l) => l.id !== exceptLeadId && phoneKey(l.phone || "") === p);
+}
+
+// Checks an edit's new email and phone. Returns a reason, or null if fine.
+// The phone is rewritten to its 10 digits.
+function contactEditProblem(
+  leads: Lead[],
+  leadId: string,
+  changes: Partial<Record<EditableLeadField, { from: string; to: string }>>
+): string | null {
+  if (changes.email && !EMAIL_RE.test(changes.email.to.trim())) return "That email doesn't look right";
+  if (changes.email && emailTaken(leads, changes.email.to, leadId)) return "Another lead already has that email";
+  if (changes.phone) {
+    const digits = phoneDigits(changes.phone.to);
+    if (digits === null) return `Phone ${PHONE_RULE}`;
+    changes.phone = { ...changes.phone, to: digits };
+    if (phoneTaken(leads, digits, leadId)) return "Another lead already has that phone number";
+  }
+  return null;
 }
 
 function activityEntry(who: string, txt: string): ActivityEntry {
@@ -702,9 +727,8 @@ export const useStore = create<StoreState>((set, get) => ({
   saveLeadEdit: (leadId, changes) => {
     const state = get();
     if (!Object.keys(changes).length) return null;
-    if (changes.email && emailTaken(state.leads, changes.email.to, leadId)) {
-      return "Another lead already has that email";
-    }
+    const problem = contactEditProblem(state.leads, leadId, changes);
+    if (problem) return problem;
     const me = state.currentUser();
     if (state.isManager()) {
       set((s) => ({
@@ -853,6 +877,11 @@ export const useStore = create<StoreState>((set, get) => ({
       const newEmail = cr.changes.email?.to;
       if (approve && newEmail && emailTaken(state.leads, newEmail, cr.leadId)) {
         state.showToast(`Can't approve — another lead already uses ${newEmail}`);
+        return;
+      }
+      const newPhone = cr.changes.phone?.to;
+      if (approve && newPhone && phoneTaken(state.leads, newPhone, cr.leadId)) {
+        state.showToast(`Can't approve — another lead already uses ${newPhone}`);
         return;
       }
       const fields = Object.keys(cr.changes)

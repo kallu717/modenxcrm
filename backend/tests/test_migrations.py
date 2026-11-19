@@ -41,7 +41,7 @@ def test_a_database_from_before_migrations_is_upgraded_in_place():
     upgrade()
     with engine.connect() as c:
         assert c.execute(text("SELECT count(*) FROM users")).scalar() == 1  # data kept
-        assert c.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0006"
+        assert c.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0007"
 
 
 def test_the_database_refuses_an_unknown_stage_or_role():
@@ -76,3 +76,24 @@ def test_saved_scores_lose_the_old_bengaluru_bonus_once():
     assert "flagship city (+10)" not in rows["L1"]["scoreReasons"]
     assert rows["L1"]["priorityOverride"] == "Hot"          # a person's choice is kept
     assert rows["L2"] == other                              # untouched
+
+
+def test_saved_phones_get_their_duplicate_key_and_old_twins_never_block_the_upgrade():
+    empty_database()
+    command.upgrade(config(), "0006")
+    phones = {"L1": "+91 98765 43210", "L2": "098765 43210",   # the same number twice
+              "L10": "080 2558 8844", "L3": "12345", "L4": ""}
+    with engine.begin() as c:
+        for lead_id, phone in phones.items():
+            c.execute(text("INSERT INTO leads (id, account, stage, version, data, created_at, updated_at) "
+                           "VALUES (:id, 'A', 'new', 1, CAST(:d AS jsonb), now(), now())"),
+                      {"id": lead_id, "d": __import__("json").dumps({"phone": phone})})
+    upgrade()
+    with engine.connect() as c:
+        keys = dict(c.execute(text("SELECT id, phone_key FROM leads")).fetchall())
+    # the older lead keeps the number; the twin, a too-short and an empty one get no key
+    assert keys == {"L1": "9876543210", "L2": None, "L10": "8025588844", "L3": None, "L4": None}
+    with pytest.raises(IntegrityError), engine.begin() as c:
+        c.execute(text("UPDATE leads SET phone_key = '9876543210' WHERE id = 'L3'"))
+    command.downgrade(config(), "0006")
+    assert "phone_key" not in {col["name"] for col in inspect(engine).get_columns("leads")}

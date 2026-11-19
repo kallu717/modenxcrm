@@ -169,7 +169,8 @@ def test_approval_lands_together_with_the_edit(priya, meera):
     })
     assert r.status_code == 200
     assert r.json()["records"][0]["data"]["decidedBy"] == _uid(meera)
-    assert _all(priya)[ROW["email"]]["lead"]["phone"] == "+91 90000 00000"
+    # saved as its 10 digits
+    assert _all(priya)[ROW["email"]]["lead"]["phone"] == "9000000000"
 
 
 def test_sync_needs_the_csrf_header(priya):

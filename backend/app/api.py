@@ -19,6 +19,7 @@ from .auth import admin_user, csrf_guard, current_user, is_server_admin, signed_
 from .config import get_settings
 from .db import get_db
 from .models import RECORD_KINDS, ROLES, STAGES as LEAD_STAGES, Lead, Record, User, lead_id_seq
+from .phone import PHONE_RULE, phone_digits
 from .scoring import apply_score
 
 settings = get_settings()
@@ -211,12 +212,15 @@ def put_lead(lead_id: str, body: LeadPut, db: Session = Depends(get_db), user: U
 
 @contextmanager
 def duplicate_email_is_409(db: Session):
-    """The unique email index fires on flush or commit; either way it's a 409."""
+    """The unique email and phone indexes fire on flush or commit; either way
+    it's a 409, saying which one."""
     try:
         yield
-    except IntegrityError:
+    except IntegrityError as e:
         db.rollback()
-        raise HTTPException(409, {"code": "duplicate_email"})
+        diag = getattr(e.orig, "diag", None)
+        which = getattr(diag, "constraint_name", "") or str(e.orig)
+        raise HTTPException(409, {"code": "duplicate_phone" if "phone" in which else "duplicate_email"})
 
 
 def lock_accounts(db: Session, names) -> None:
@@ -266,6 +270,20 @@ def update_lead(db: Session, user: User, lead_id: str, version: int, lead: dict,
         renamed[lead_id] = row.account
     new["account"] = account
     email = (new.get("email") or "").strip()
+    phone = (new.get("phone") or "").strip()
+    old_phone = (old.get("phone") or "").strip()
+    if email != (old.get("email") or "").strip() and email and not EMAIL_RE.match(email):
+        raise HTTPException(422, {"code": "bad_email"})
+    if phone != old_phone:
+        # A changed phone must fit the rule; it's saved as its 10 digits.
+        if phone:
+            digits = phone_digits(phone)
+            if digits is None:
+                raise HTTPException(422, {"code": "bad_phone"})
+            new["phone"] = phone = digits
+        row.phone_key = phone or None
+    if not email and not phone and ((old.get("email") or "").strip() or old_phone):
+        raise HTTPException(422, {"code": "needs_email_or_phone"})
     apply_score(new)
     row.data = new
     row.account = account
@@ -346,9 +364,11 @@ FIELD_LABELS = (("name", "Contact name"), ("title", "Job title"), ("account", "A
 
 
 def process_rows(db: Session, user: User, rows: list[LeadIn], source: str, *, dry_run: bool, strict: bool):
-    """Shared by CSV/XLSX import and the New lead form. Validates every row,
-    drops duplicate emails (against the whole database, not just what this
-    user can see), resolves the owner, and — unless dry_run — inserts.
+    """Shared by CSV/XLSX import, the Lead Desk push and the New lead form.
+    Validates every row (each needs an email or a 10-digit phone, or both),
+    drops duplicate emails and phone numbers (against the whole database, not
+    just what this user can see), resolves the owner, and — unless dry_run —
+    inserts.
 
     Owners are per location (account + city): a contact joins whoever owns
     its city at that account. A city the account doesn't have an owner for
@@ -357,6 +377,8 @@ def process_rows(db: Session, user: User, rows: list[LeadIn], source: str, *, dr
     issues, valid = [], []
     emails = {r.email.lower() for r in rows if r.email}
     existing_emails = set(db.scalars(select(Lead.email_lc).where(Lead.email_lc.in_(emails)))) if emails else set()
+    phones = {p for p in (phone_digits(r.phone) for r in rows if r.phone) if p}
+    existing_phones = set(db.scalars(select(Lead.phone_key).where(Lead.phone_key.in_(phones)))) if phones else set()
     # Accounts are matched case-insensitively: a contact joining an existing
     # account takes that account's exact name and type, so one account never
     # splits in two. Keys below are lower-cased names.
@@ -375,11 +397,12 @@ def process_rows(db: Session, user: User, rows: list[LeadIn], source: str, *, dr
                 owners.setdefault((acct.lower(), location_key(city)), owner)
     known_accounts = set(canonical)
     seen_emails: set[str] = set()
+    seen_phones: set[str] = set()
     duplicates = 0
 
     for i, r in enumerate(rows):
         row_no = i + 2  # row 1 is the header
-        required = list(FIELD_LABELS) + ([("email", "Email"), ("city", "City")] if strict else [])
+        required = list(FIELD_LABELS) + ([("city", "City")] if strict else [])
         missing = [label for key, label in required if not getattr(r, key)]
         if missing:
             issues.append(f"Row {row_no}: missing {', '.join(missing)}")
@@ -390,17 +413,30 @@ def process_rows(db: Session, user: User, rows: list[LeadIn], source: str, *, dr
         if r.type not in VALID_TYPES:
             issues.append(f'Row {row_no}: account type "{r.type}" must be Brand, Mall or Store')
             continue
+        if not r.email and not r.phone:
+            issues.append(f"Row {row_no}: needs an email or a phone number")
+            continue
         if r.email and not EMAIL_RE.match(r.email):
             issues.append(f"Row {row_no}: {r.email} doesn't look like an email address")
+            continue
+        phone = phone_digits(r.phone) if r.phone else ""
+        if phone is None:
+            issues.append(f"Row {row_no}: phone {r.phone} {PHONE_RULE}")
             continue
         email_lc = r.email.lower()
         if email_lc and (email_lc in existing_emails or email_lc in seen_emails):
             duplicates += 1
             issues.append(f"Row {row_no}: {r.email} already exists — skipped")
             continue
+        if phone and (phone in existing_phones or phone in seen_phones):
+            duplicates += 1
+            issues.append(f"Row {row_no}: phone {phone} already exists — skipped")
+            continue
         if email_lc:
             seen_emails.add(email_lc)
-        valid.append(r)
+        if phone:
+            seen_phones.add(phone)
+        valid.append(r.model_copy(update={"phone": phone}))
 
     new_accounts = len({r.account.lower() for r in valid} - known_accounts)
     result = {
@@ -448,7 +484,7 @@ def process_rows(db: Session, user: User, rows: list[LeadIn], source: str, *, dr
         }
         apply_score(lead)
         row = Lead(id=lead["id"], account=account, email_lc=email_lc_or_none(r.email),
-                   assignee_id=assignee, stage="new", version=1, data=lead, updated_by=user.id)
+                   phone_key=r.phone or None, assignee_id=assignee, stage="new", version=1, data=lead, updated_by=user.id)
         db.add(row)
         result["created"].append(row)
     with duplicate_email_is_409(db):

@@ -49,7 +49,7 @@ describe("S. Saving to the server", () => {
     const base = snapshot(store());
     store().applyChangeRequest(store().changeRequests[0].id, true);
     const d = diff(base, store(), versions());
-    expect(d.leads.map((x) => x.lead.phone)).toEqual(["+91 90000 00000"]);
+    expect(d.leads.map((x) => x.lead.phone)).toEqual(["9000000000"]);
     expect(d.records.map((r) => (r.data as { status: string }).status)).toEqual(["approved"]);
   });
 

@@ -131,7 +131,7 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
           <>
             <h3 className="text-[15px] font-semibold" style={{ color: "var(--ink)" }}>Template columns</h3>
             <p className="text-[12.5px] mt-1" style={{ color: "var(--muted)" }}>
-              Put these in row 1 of your sheet, one lead per row after that. Starred columns are required.
+              Put these in row 1 of your sheet, one lead per row after that. Starred columns are required, and every row needs an <b>Email</b> or a <b>Phone</b> (or both).
             </p>
             <div className="overflow-x-auto mt-3">
               <table className="text-[11.5px] w-full" style={{ borderCollapse: "collapse" }}>
@@ -157,7 +157,9 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
             </div>
             <p className="text-[12px] mt-3" style={{ color: "var(--muted)" }}>
               <b style={{ color: "var(--ink)" }}>Account type</b> must be Brand, Mall or Store.{" "}
-              <b style={{ color: "var(--ink)" }}>Email verified</b> takes Yes or No — it feeds the priority score.
+              <b style={{ color: "var(--ink)" }}>Email verified</b> takes Yes or No — it feeds the priority score.{" "}
+              <b style={{ color: "var(--ink)" }}>Phone</b> must be 10 digits (+91 or a leading 0 is fine). A row whose
+              email or phone is already in the CRM is skipped.
               Paste into cell A1 of a blank Excel sheet and the columns land in order.
             </p>
             {copyFallback && (

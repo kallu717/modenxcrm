@@ -52,6 +52,8 @@ class Lead(Base):
     id: Mapped[str] = mapped_column(String(16), primary_key=True)
     account: Mapped[str] = mapped_column(String(300), index=True)
     email_lc: Mapped[str | None] = mapped_column(String(320))
+    # The phone's 10 digits (see app/phone.py); a duplicate key like email_lc.
+    phone_key: Mapped[str | None] = mapped_column(String(10))
     assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
     stage: Mapped[str] = mapped_column(String(16), index=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
@@ -67,6 +69,13 @@ class Lead(Base):
             "email_lc",
             unique=True,
             postgresql_where=text("email_lc IS NOT NULL AND email_lc <> ''"),
+        ),
+        # One lead per phone number too, matched on its 10 digits.
+        Index(
+            "uq_leads_phone_key",
+            "phone_key",
+            unique=True,
+            postgresql_where=text("phone_key IS NOT NULL AND phone_key <> ''"),
         ),
         # Accounts are matched case-insensitively (import, one-owner check).
         Index("ix_leads_account_lc", func.lower(account)),

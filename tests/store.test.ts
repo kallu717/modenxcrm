@@ -190,7 +190,7 @@ describe("M. Edit approvals", () => {
     store().saveLeadEdit(a.id, phoneChange);
     as("meera");
     store().applyChangeRequest(pending()[0].id, true);
-    expect(leadById(a.id).phone).toBe("+91 98765 43210");
+    expect(leadById(a.id).phone).toBe("9876543210");
     expect(store().changeRequests[0].status).toBe("approved");
   });
 
@@ -204,7 +204,7 @@ describe("M. Edit approvals", () => {
 
   it("M4 a manager's edit applies immediately", () => {
     store().saveLeadEdit(a.id, phoneChange);
-    expect(leadById(a.id).phone).toBe("+91 98765 43210");
+    expect(leadById(a.id).phone).toBe("9876543210");
     expect(store().changeRequests).toHaveLength(0);
   });
 
