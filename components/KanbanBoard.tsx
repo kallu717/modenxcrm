@@ -1,11 +1,12 @@
 "use client";
 
+import { celebrate } from "@/lib/confetti";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { STAGES, repById } from "@/lib/constants";
 import { effectivePriority } from "@/lib/scoring";
-import { fmtFollowup } from "@/lib/dates";
-import { planById, fmtInr, needsRevenueDetails } from "@/lib/revenue";
+import { fmtFollowup, fmtShortDate } from "@/lib/dates";
+import { isPilot, planLabel, fmtInr, leadMrr, needsRevenueDetails } from "@/lib/revenue";
 import type { Lead, Stage } from "@/lib/types";
 import WonModal from "./WonModal";
 import LeadDrawer from "./LeadDrawer";
@@ -43,6 +44,7 @@ function LeadCard({
   const mtg = nextMeeting(lead);
   const priority = effectivePriority(lead);
   const pStyle = PRIORITY_STYLE[priority];
+  const [dragging, setDragging] = useState(false);
 
   return (
     <div
@@ -50,9 +52,11 @@ function LeadCard({
       onDragStart={(e) => {
         onDragStart(lead.id);
         e.dataTransfer.effectAllowed = "move";
+        setDragging(true);
       }}
+      onDragEnd={() => setDragging(false)}
       onClick={() => onOpen(lead.id)}
-      className="rounded-lg border p-3 mb-2 cursor-pointer select-none"
+      className={`rounded-lg border p-3 mb-2 cursor-pointer select-none fx-lift ${dragging ? "fx-dragging" : ""}`}
       style={{ background: "var(--surface)", borderColor: "var(--grid)", boxShadow: "var(--shadow)" }}
     >
       <div className="flex items-start justify-between gap-2">
@@ -93,14 +97,21 @@ function LeadCard({
           className="mt-1.5 rounded px-1.5 py-1 font-mono w-fit"
           style={{ fontSize: "10.5px", background: "var(--warn-soft)", color: "var(--warn)" }}
         >
-          ⚠ Subscription needed
+          ⚠ {isPilot(lead) ? "Pilot ended — add subscription" : "Subscription needed"}
+        </div>
+      ) : isPilot(lead) ? (
+        <div
+          className="mt-1.5 rounded px-1.5 py-1 font-mono w-fit"
+          style={{ fontSize: "10.5px", background: "var(--accent-soft)", color: "var(--accent-ink)" }}
+        >
+          Pilot · ends {lead.pilotEndDate ? fmtShortDate(lead.pilotEndDate) : "—"}
         </div>
       ) : lead.stage === "won" && lead.plan ? (
         <div
           className="mt-1.5 rounded px-1.5 py-1 font-mono w-fit"
           style={{ fontSize: "10.5px", background: "var(--good-soft)", color: "var(--good)" }}
         >
-          {planById(lead.plan)?.name} · {fmtInr(lead.plan ? planById(lead.plan)!.mrr : 0)}/mo
+          {planLabel(lead.plan)} · {fmtInr(leadMrr(lead))}/mo
         </div>
       ) : null}
       {rep && (
@@ -147,6 +158,8 @@ export default function KanbanBoard({ leads }: { leads: Lead[] }) {
               style={{
                 background: "var(--surface-2)",
                 borderColor: dragOverStage === stage.id ? "var(--accent)" : "var(--grid)",
+                boxShadow: dragOverStage === stage.id ? "0 0 0 3px var(--accent-soft), 0 10px 28px rgba(0,0,0,.12)" : "none",
+                transition: "box-shadow .18s, border-color .18s",
               }}
               onDragOver={(e) => {
                 e.preventDefault();
@@ -160,6 +173,7 @@ export default function KanbanBoard({ leads }: { leads: Lead[] }) {
                 const lead = leads.find((l) => l.id === dragId);
                 if (lead && lead.stage !== stage.id) {
                   setLeadStage(lead.id, stage.id, "board");
+                  if (stage.id === "won") celebrate({ x: e.clientX, y: e.clientY });
                   if (stage.id === "won" && !lead.plan) {
                     setWonModalLead({ ...lead, stage: stage.id });
                   } else {

@@ -1,0 +1,21 @@
+# Build from the repo root:  docker build -f deploy/Dockerfile.frontend -t modenx-web .
+# Starting point. See docs/PLAN.md decision D2: the front end may become a
+# static export served straight by the proxy, which would remove this container.
+FROM node:24-alpine AS build
+WORKDIR /srv
+COPY package.json package-lock.json ./
+RUN npm ci --no-fund
+COPY . .
+RUN npm run build
+
+FROM node:24-alpine
+ENV NODE_ENV=production
+WORKDIR /srv
+COPY --from=build /srv/package.json /srv/package-lock.json ./
+RUN npm ci --omit=dev --no-fund
+COPY --from=build /srv/.next ./.next
+COPY --from=build /srv/public ./public
+COPY --from=build /srv/next.config.ts ./next.config.ts
+USER node
+EXPOSE 3000
+CMD ["npm", "start"]

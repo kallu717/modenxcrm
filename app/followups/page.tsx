@@ -3,12 +3,15 @@
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { EDITABLE_FIELDS, ACCOUNT_EDITABLE_FIELDS, repById } from "@/lib/constants";
-import { fmtShortDate, fmtFollowup, fmtDueIn, followupBucket, daysUntil } from "@/lib/dates";
-import { duePayments, planById, fmtInr, leadMrr } from "@/lib/revenue";
+import { fmtShortDate, fmtFollowup, followupBucket } from "@/lib/dates";
+import { duePayments, fmtInr, leadMrr, isPilot } from "@/lib/revenue";
 import { effectivePriority } from "@/lib/scoring";
 import { applyFuDateFilter, EMPTY_FU_DATE_FILTER, type FuDateFilter } from "@/lib/filters";
 import LeadDrawer from "@/components/LeadDrawer";
 import ContactedModal from "@/components/ContactedModal";
+import RenewPilotModal from "@/components/RenewPilotModal";
+import PaymentsList from "@/components/PaymentsList";
+import PillTabs from "@/components/PillTabs";
 import type { Lead } from "@/lib/types";
 import type { ChangeRequest } from "@/lib/store";
 
@@ -50,7 +53,7 @@ function Approvals({ onOpenLead }: { onOpenLead: (id: string) => void }) {
           ? "Reps can't change contact or account details directly — approve a request and it's applied straight away."
           : "Waiting on your manager. Nothing changes until these are approved."}
       </p>
-      <div className="space-y-2">
+      <div className="space-y-2 fx-list">
         {mine.map((cr: ChangeRequest) => {
           const isAcct = cr.scope === "account";
           const lead = isAcct ? null : leads.find((l) => l.id === cr.leadId);
@@ -143,14 +146,17 @@ function Approvals({ onOpenLead }: { onOpenLead: (id: string) => void }) {
 
 function Payments({ visibleLeads, onOpenLead }: { visibleLeads: Lead[]; onOpenLead: (id: string) => void }) {
   const isManager = useStore((s) => s.isManager());
+  const payments = useStore((s) => s.payments);
   const paymentReminders = useStore((s) => s.paymentReminders);
-  const logPaymentReminder = useStore((s) => s.logPaymentReminder);
-  const showToast = useStore((s) => s.showToast);
 
-  const due = useMemo(() => duePayments(visibleLeads, paymentReminders), [visibleLeads, paymentReminders]);
+  const due = useMemo(
+    () => duePayments(visibleLeads, payments, paymentReminders),
+    [visibleLeads, payments, paymentReminders]
+  );
   if (!due.length) return null;
 
   const total = due.reduce((s, x) => s + leadMrr(x.lead), 0);
+  const overdue = due.filter((d) => d.status === "overdue").length;
 
   return (
     <section className="mb-6">
@@ -158,68 +164,11 @@ function Payments({ visibleLeads, onOpenLead }: { visibleLeads: Lead[]; onOpenLe
         Payments due ({due.length})
       </p>
       <p className="text-[12px] mt-0.5 mb-3" style={{ color: "var(--muted)" }}>
-        {isManager
-          ? `${fmtInr(total)} debiting in the next 7 days across ${due.length} mandate${due.length === 1 ? "" : "s"}.`
-          : `${fmtInr(total)} debiting from your accounts in the next 7 days — worth a heads-up before the mandate runs.`}
+        {fmtInr(total)} {isManager ? `across ${due.length} debit${due.length === 1 ? "" : "s"}` : "from your accounts"}
+        {overdue ? `, ${overdue} not marked paid yet` : ""}. Debits in the next 7 days, and any from the last 30 days
+        nobody has marked paid.
       </p>
-      <div className="space-y-2">
-        {due.map(({ lead, date }) => {
-          const rep = repById(lead.assignee);
-          const soon = daysUntil(date) <= 1;
-          return (
-            <div
-              key={lead.id}
-              className="flex items-center gap-3 rounded-lg p-3 cursor-pointer"
-              style={{
-                background: "var(--surface)",
-                boxShadow: "var(--shadow)",
-                borderLeft: soon ? "3px solid var(--crit)" : "3px solid transparent",
-              }}
-              onClick={() => onOpenLead(lead.id)}
-            >
-              <span className="font-mono text-[11.5px] w-24 shrink-0" style={{ color: soon ? "var(--crit)" : "var(--muted)" }}>
-                {fmtDueIn(date)}
-              </span>
-              <div className="flex-1 flex items-center gap-2 flex-wrap text-[12.5px]">
-                <span style={{ color: "var(--ink)" }}>{lead.account}</span>
-                <span
-                  className="px-1.5 py-0.5 rounded text-[10px] font-mono"
-                  style={{ background: "var(--accent-soft)", color: "var(--accent-ink)" }}
-                >
-                  {lead.type}
-                </span>
-                <span style={{ color: "var(--ink-2)" }}>{lead.name}</span>
-                <span className="font-mono" style={{ color: "var(--good)" }}>
-                  {planById(lead.plan)?.name} · {fmtInr(leadMrr(lead))}
-                </span>
-                {rep && (
-                  <span className="flex items-center gap-1" style={{ color: "var(--ink-2)" }}>
-                    <span
-                      className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-semibold"
-                      style={{ background: rep.color }}
-                    >
-                      {initials(rep.name)}
-                    </span>
-                    {rep.name}
-                  </span>
-                )}
-              </div>
-              <button
-                type="button"
-                className="px-2.5 py-1 rounded text-[12px] border shrink-0"
-                style={{ borderColor: "var(--grid)", color: "var(--ink)" }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  logPaymentReminder(lead.id, date);
-                  showToast("Reminder logged for " + lead.account);
-                }}
-              >
-                Log reminder sent
-              </button>
-            </div>
-          );
-        })}
-      </div>
+      <PaymentsList due={due} onOpenLead={onOpenLead} />
     </section>
   );
 }
@@ -244,6 +193,7 @@ export default function FollowupsPage() {
   const [dateFilter, setDateFilter] = useState<FuDateFilter>(EMPTY_FU_DATE_FILTER);
   const [openLeadId, setOpenLeadId] = useState<string | null>(null);
   const [contactedLead, setContactedLead] = useState<Lead | null>(null);
+  const [renewPilotLead, setRenewPilotLead] = useState<Lead | null>(null);
 
   const withFollowup = useMemo(() => {
     const base = visibleLeads
@@ -267,20 +217,11 @@ export default function FollowupsPage() {
 
       <section>
         <div className="flex items-center gap-1 flex-wrap mb-3">
-          {FU_PRESETS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              className="px-2.5 py-1 rounded-md text-[12px]"
-              style={{
-                background: dateFilter.preset === p.id ? "var(--accent-soft)" : "transparent",
-                color: dateFilter.preset === p.id ? "var(--accent-ink)" : "var(--ink-2)",
-              }}
-              onClick={() => setDateFilter({ ...dateFilter, preset: p.id })}
-            >
-              {p.label}
-            </button>
-          ))}
+          <PillTabs
+            items={FU_PRESETS.map((p) => ({ key: p.id, label: p.label }))}
+            active={dateFilter.preset}
+            onChange={(key) => setDateFilter({ ...dateFilter, preset: key as FuDateFilter["preset"] })}
+          />
           {dateFilter.preset === "custom" && (
             <>
               <input
@@ -319,7 +260,7 @@ export default function FollowupsPage() {
                     {items.length}
                   </span>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 fx-list">
                   {items.map((l) => {
                     const rep = repById(l.assignee);
                     return (
@@ -334,6 +275,14 @@ export default function FollowupsPage() {
                         </span>
                         <div className="flex-1 flex items-center gap-2 flex-wrap text-[12.5px]">
                           <span style={{ color: "var(--ink)" }}>{l.name}</span>
+                          {isPilot(l) && l.nextFollowup === l.pilotEndDate && (
+                            <span
+                              className="px-1.5 py-0.5 rounded text-[10px] font-mono"
+                              style={{ background: "var(--warn-soft)", color: "var(--warn)" }}
+                            >
+                              Pilot ends — add subscription
+                            </span>
+                          )}
                           <span
                             className="px-1.5 py-0.5 rounded text-[10px] font-mono"
                             style={{ background: "var(--accent-soft)", color: "var(--accent-ink)" }}
@@ -362,25 +311,51 @@ export default function FollowupsPage() {
                           )}
                         </div>
                         <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            className="px-2.5 py-1 rounded text-[12px] border"
-                            style={{ borderColor: "var(--grid)", color: "var(--ink)" }}
-                            onClick={() => {
-                              snoozeFollowup(l.id, 7);
-                              showToast(`Snoozed ${l.name} by a week`);
-                            }}
-                          >
-                            Snooze 1wk
-                          </button>
-                          <button
-                            type="button"
-                            className="px-2.5 py-1 rounded text-[12px] text-white"
-                            style={{ background: "var(--accent)" }}
-                            onClick={() => setContactedLead(l)}
-                          >
-                            Contacted
-                          </button>
+                          {isPilot(l) && l.nextFollowup === l.pilotEndDate ? (
+                            <>
+                              <button
+                                type="button"
+                                className="px-2.5 py-1 rounded text-[12px] border"
+                                style={{ borderColor: "var(--grid)", color: "var(--ink)" }}
+                                onClick={() => {
+                                  snoozeFollowup(l.id, 7);
+                                  showToast(`Snoozed ${l.name} by a week`);
+                                }}
+                              >
+                                Snooze 1wk
+                              </button>
+                              <button
+                                type="button"
+                                className="px-2.5 py-1 rounded text-[12px] text-white"
+                                style={{ background: "var(--accent)" }}
+                                onClick={() => setRenewPilotLead(l)}
+                              >
+                                Renew pilot
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                className="px-2.5 py-1 rounded text-[12px] border"
+                                style={{ borderColor: "var(--grid)", color: "var(--ink)" }}
+                                onClick={() => {
+                                  snoozeFollowup(l.id, 7);
+                                  showToast(`Snoozed ${l.name} by a week`);
+                                }}
+                              >
+                                Snooze 1wk
+                              </button>
+                              <button
+                                type="button"
+                                className="px-2.5 py-1 rounded text-[12px] text-white"
+                                style={{ background: "var(--accent)" }}
+                                onClick={() => setContactedLead(l)}
+                              >
+                                Contacted
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     );
@@ -394,6 +369,7 @@ export default function FollowupsPage() {
 
       {openLeadId && <LeadDrawer leadId={openLeadId} onClose={() => setOpenLeadId(null)} />}
       {contactedLead && <ContactedModal lead={contactedLead} onClose={() => setContactedLead(null)} />}
+      {renewPilotLead && <RenewPilotModal lead={renewPilotLead} onClose={() => setRenewPilotLead(null)} />}
     </div>
   );
 }

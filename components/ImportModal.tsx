@@ -1,8 +1,11 @@
 "use client";
 
+import Modal from "@/components/Modal";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { IMPORT_COLUMNS, readSheet, stageImport, templateTsv, type StagedImport } from "@/lib/import";
+import { api, describeError } from "@/lib/api";
+import { adoptLeads } from "@/lib/sync";
 
 type Step = "choose" | "template" | "upload";
 
@@ -11,21 +14,52 @@ const btnStyle = { borderColor: "var(--grid)", color: "var(--ink)" };
 
 export default function ImportModal({ onClose }: { onClose: () => void }) {
   const leads = useStore((s) => s.leads);
-  const importLeads = useStore((s) => s.importLeads);
+  const currentUserId = useStore((s) => s.currentUserId);
   const isManager = useStore((s) => s.isManager());
+  const toMe = useStore((s) => s.uploadsGoToMe());
   const showToast = useStore((s) => s.showToast);
   const [step, setStep] = useState<Step>("choose");
   const [staged, setStaged] = useState<StagedImport | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
   const [copyFallback, setCopyFallback] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
+  // The sheet is checked here first (missing columns, bad types, emails you
+  // can see), then by the server, which also knows every other rep's leads.
+  // Rows the server would skip are dropped from the preview.
   const handleFile = async (file: File) => {
     setReadError(null);
     setStaged(null);
+    let local: StagedImport;
     try {
-      setStaged(stageImport(await readSheet(file), file.name, leads));
+      local = stageImport(await readSheet(file), file.name, leads);
     } catch {
       setReadError("Couldn't read that file — is it a valid spreadsheet?");
+      return;
+    }
+    if (!local.rows.length) {
+      setStaged(local);
+      return;
+    }
+    try {
+      const dry = await api.importLeads(local.rows, local.filename, true);
+      const skipped = new Set<number>();
+      const issues = dry.issues.map((t) => {
+        const m = /^Row (\d+): (.*)$/.exec(t);
+        if (!m) return t;
+        skipped.add(Number(m[1]) - 2); // the server numbers the rows it was sent, from 2
+        return m[2].replace("already exists", "is already in the CRM");
+      });
+      setStaged({
+        ...local,
+        rows: local.rows.filter((_, i) => !skipped.has(i)),
+        newAccounts: dry.newAccounts,
+        duplicates: local.duplicates + dry.duplicates,
+        rejected: local.rejected + dry.rejected,
+        issues: [...local.issues, ...issues],
+      });
+    } catch (e) {
+      setReadError(describeError(e));
     }
   };
 
@@ -38,24 +72,28 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const confirmImport = () => {
-    if (!staged) return;
-    const { count, toOwnAccount } = importLeads(staged.rows, staged.filename);
-    showToast(
-      !isManager && toOwnAccount
-        ? `Imported ${count} lead${count === 1 ? "" : "s"} — ${toOwnAccount} assigned to you`
-        : `Imported ${count} lead${count === 1 ? "" : "s"}`
-    );
-    onClose();
+  const confirmImport = async () => {
+    if (!staged || busy) return;
+    setBusy(true);
+    try {
+      const res = await api.importLeads(staged.rows, staged.filename, false);
+      adoptLeads(res.created);
+      const count = res.createdCount;
+      const toOwnAccount = res.created.filter((x) => x.lead.assignee === currentUserId).length;
+      showToast(
+        toOwnAccount
+          ? `Imported ${count} lead${count === 1 ? "" : "s"} — ${toOwnAccount} assigned to you`
+          : `Imported ${count} lead${count === 1 ? "" : "s"}`
+      );
+      onClose();
+    } catch (e) {
+      setReadError(describeError(e));
+      setBusy(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,.4)" }} onClick={onClose}>
-      <div
-        className="w-full max-w-2xl rounded-xl p-5 max-h-[90vh] overflow-y-auto"
-        style={{ background: "var(--surface)", boxShadow: "var(--shadow-lg)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} label={"Import leads"} width="max-w-2xl">
         {step === "choose" && (
           <>
             <h3 className="text-[15px] font-semibold" style={{ color: "var(--ink)" }}>Import leads</h3>
@@ -90,7 +128,7 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
           <>
             <h3 className="text-[15px] font-semibold" style={{ color: "var(--ink)" }}>Template columns</h3>
             <p className="text-[12.5px] mt-1" style={{ color: "var(--muted)" }}>
-              Put these in row 1 of your sheet, one lead per row after that. Starred columns are required.
+              Put these in row 1 of your sheet, one lead per row after that. Starred columns are required, and every row needs an <b>Email</b> or a <b>Phone</b> (or both).
             </p>
             <div className="overflow-x-auto mt-3">
               <table className="text-[11.5px] w-full" style={{ borderCollapse: "collapse" }}>
@@ -116,7 +154,9 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
             </div>
             <p className="text-[12px] mt-3" style={{ color: "var(--muted)" }}>
               <b style={{ color: "var(--ink)" }}>Account type</b> must be Brand, Mall or Store.{" "}
-              <b style={{ color: "var(--ink)" }}>Email verified</b> takes Yes or No — it feeds the priority score.
+              <b style={{ color: "var(--ink)" }}>Email verified</b> takes Yes or No — it feeds the priority score.{" "}
+              <b style={{ color: "var(--ink)" }}>Phone</b> must be 10 digits (+91 or a leading 0 is fine). A row whose
+              email or phone is already in the CRM is skipped.
               Paste into cell A1 of a blank Excel sheet and the columns land in order.
             </p>
             {copyFallback && (
@@ -180,12 +220,14 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
                     {staged.issues.length > 40 && <div>…and {staged.issues.length - 40} more</div>}
                   </div>
                 )}
-                {!isManager && (
-                  <p className="text-[12px] mt-3" style={{ color: "var(--muted)" }}>
-                    New accounts go straight to you, no approval needed. A contact for an account someone else
-                    already owns stays with that rep — one account, one owner.
-                  </p>
-                )}
+                <p className="text-[12px] mt-3" style={{ color: "var(--muted)" }}>
+                  {toMe
+                    ? "New accounts and new cities go straight to you, no approval needed."
+                    : isManager
+                      ? "New accounts and new cities arrive unassigned, for a manager to hand out."
+                      : "New accounts and new cities arrive unassigned, for a manager to hand out, so you won't see them until one is assigned to you."}{" "}
+                  A contact in a city someone already owns at that account stays with them — one city, one owner.
+                </p>
                 {!staged.rows.length && (
                   <p className="text-[12px] mt-3" style={{ color: "var(--muted)" }}>Nothing to import — fix the rows above and try again.</p>
                 )}
@@ -195,14 +237,13 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
             <div className="flex justify-end gap-2 mt-5">
               <button type="button" className={btn} style={btnStyle} onClick={() => setStep("choose")}>Back</button>
               {staged && staged.rows.length > 0 && (
-                <button type="button" className="px-3 py-1.5 rounded-md text-[13px] text-white" style={{ background: "var(--accent)" }} onClick={confirmImport}>
+                <button type="button" disabled={busy} className="px-3 py-1.5 rounded-md text-[13px] text-white disabled:opacity-60" style={{ background: "var(--accent)" }} onClick={confirmImport}>
                   Import {staged.rows.length} lead{staged.rows.length === 1 ? "" : "s"}
                 </button>
               )}
             </div>
           </>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }

@@ -1,8 +1,13 @@
 "use client";
 
+import Modal from "@/components/Modal";
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { CITIES, repById } from "@/lib/constants";
+import { locationKey } from "@/lib/accounts";
+import { api, describeError } from "@/lib/api";
+import { EMAIL_RE, PHONE_RULE, phoneDigits } from "@/lib/phone";
+import { adoptLeads } from "@/lib/sync";
 import type { AccountType } from "@/lib/types";
 
 const VALID_TYPES: AccountType[] = ["Brand", "Mall", "Store"];
@@ -11,11 +16,12 @@ const inputStyle = { borderColor: "var(--grid)", background: "var(--surface)", c
 
 export default function NewLeadModal({ onClose }: { onClose: () => void }) {
   const leads = useStore((s) => s.leads);
-  const createLead = useStore((s) => s.createLead);
   const showToast = useStore((s) => s.showToast);
+  const toMe = useStore((s) => s.uploadsGoToMe());
 
   const [form, setForm] = useState({
-    name: "",
+    firstName: "",
+    lastName: "",
     title: "",
     account: "",
     type: "Brand" as AccountType,
@@ -26,40 +32,71 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
     verified: false,
   });
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const existingAccount = useMemo(
     () => leads.find((l) => l.account.toLowerCase() === form.account.trim().toLowerCase()),
     [leads, form.account]
   );
-  const existingOwner = existingAccount ? repById(existingAccount.assignee) : null;
+  // Owners are per city: the contact joins whoever owns this city at the account.
+  const existingOwner = useMemo(() => {
+    if (!existingAccount) return null;
+    const key = locationKey(form.city);
+    const owned = leads.find(
+      (l) => l.account === existingAccount.account && locationKey(l.city) === key && l.assignee
+    );
+    return owned ? repById(owned.assignee) : null;
+  }, [leads, existingAccount, form.city]);
 
   const set = <K extends keyof typeof form>(key: K, v: (typeof form)[K]) =>
     setForm((s) => ({ ...s, [key]: v }));
 
-  const submit = () => {
-    const required = ["name", "title", "account", "type", "email", "city"] as const;
-    const missing = required.filter((k) => !form[k]);
+  const submit = async () => {
+    if (busy) return;
+    const required = ["firstName", "lastName", "title", "account", "type", "city"] as const;
+    const missing = required.filter((k) => !form[k].trim());
     if (missing.length) {
       setError("Fill in all required fields.");
       return;
     }
-    if (!/^\S+@\S+\.\S+$/.test(form.email)) {
+    const email = form.email.trim();
+    const rawPhone = form.phone.trim();
+    if (!email && !rawPhone) {
+      setError("Add an email or a phone number (or both).");
+      return;
+    }
+    if (email && !EMAIL_RE.test(email)) {
       setError("That email doesn't look right.");
       return;
     }
-    const lead = createLead({
-      name: form.name,
-      title: form.title,
-      account: form.account,
-      type: existingAccount ? existingAccount.type : form.type,
-      email: form.email,
-      phone: form.phone,
-      city: form.city,
-      notes: form.notes,
-      verified: form.verified,
-    });
-    if (!lead) {
-      setError("A lead with that email already exists.");
+    const phone = rawPhone ? phoneDigits(rawPhone) : "";
+    if (phone === null) {
+      setError(`Phone ${PHONE_RULE}.`);
+      return;
+    }
+    // The server picks the id, joins an existing account and its owner, and
+    // checks the email and phone against everyone's leads, including ones you
+    // can't see.
+    setBusy(true);
+    let lead;
+    try {
+      const created = await api.createLead({
+        firstName: form.firstName,
+        lastName: form.lastName,
+        title: form.title,
+        account: form.account,
+        type: existingAccount ? existingAccount.type : form.type,
+        email,
+        phone,
+        city: form.city,
+        notes: form.notes,
+        verified: form.verified ? "Yes" : "No",
+      });
+      adoptLeads([created]);
+      lead = created.lead;
+    } catch (e) {
+      setError(describeError(e));
+      setBusy(false);
       return;
     }
     const owner = repById(lead.assignee);
@@ -68,37 +105,39 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,.4)" }}
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-lg rounded-xl p-5 max-h-[90vh] overflow-y-auto"
-        style={{ background: "var(--surface)", boxShadow: "var(--shadow-lg)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} label={"New lead"} width="max-w-lg">
         <h3 className="text-[15px] font-semibold" style={{ color: "var(--ink)" }}>
           New lead
         </h3>
         <p className="text-[12.5px] mt-1" style={{ color: "var(--muted)" }}>
-          Everything except phone is required. If the account already exists, this contact joins it
-          under its current owner automatically.
+          Fields marked * are required, and at least one of the two marked † (email or phone). If the account already exists, this contact joins
+          whoever owns its city there.
         </p>
 
         <div className="grid grid-cols-2 gap-3 mt-4">
           <div>
             <label className="block text-[11px] mb-1" style={{ color: "var(--muted)" }}>
-              Contact name *
+              First name *
             </label>
             <input
-              value={form.name}
-              onChange={(e) => set("name", e.target.value)}
+              value={form.firstName}
+              onChange={(e) => set("firstName", e.target.value)}
               className="w-full px-2.5 py-1.5 rounded-md text-[13px] border"
               style={inputStyle}
             />
           </div>
           <div>
+            <label className="block text-[11px] mb-1" style={{ color: "var(--muted)" }}>
+              Last name *
+            </label>
+            <input
+              value={form.lastName}
+              onChange={(e) => set("lastName", e.target.value)}
+              className="w-full px-2.5 py-1.5 rounded-md text-[13px] border"
+              style={inputStyle}
+            />
+          </div>
+          <div className="col-span-2">
             <label className="block text-[11px] mb-1" style={{ color: "var(--muted)" }}>
               Job title *
             </label>
@@ -128,7 +167,11 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
                   {existingAccount.type}
                 </span>
                 Existing account —{" "}
-                {existingOwner ? `owned by ${existingOwner.name}. This contact will join them.` : "currently unassigned."}
+                {existingOwner
+                  ? `${form.city.trim() || "this city"} is owned by ${existingOwner.name}. This contact will join them.`
+                  : form.city.trim()
+                    ? `nobody owns ${form.city.trim()} there yet, so ${toMe ? "it will be yours" : "it will arrive unassigned"}.`
+                    : "enter a city to see who it goes to."}
               </p>
             )}
           </div>
@@ -167,7 +210,7 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <label className="block text-[11px] mb-1" style={{ color: "var(--muted)" }}>
-              Email *
+              Email †
             </label>
             <input
               type="email"
@@ -179,11 +222,12 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <label className="block text-[11px] mb-1" style={{ color: "var(--muted)" }}>
-              Phone
+              Phone †
             </label>
             <input
               value={form.phone}
-              placeholder="Optional"
+              inputMode="tel"
+              placeholder="10 digits"
               onChange={(e) => set("phone", e.target.value)}
               className="w-full px-2.5 py-1.5 rounded-md text-[13px] border"
               style={inputStyle}
@@ -231,14 +275,14 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
           </button>
           <button
             type="button"
-            className="px-3 py-1.5 rounded-md text-[13px] text-white"
+            disabled={busy}
+            className="px-3 py-1.5 rounded-md text-[13px] text-white disabled:opacity-60"
             style={{ background: "var(--accent)" }}
             onClick={submit}
           >
             Add lead
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

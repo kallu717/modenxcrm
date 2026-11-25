@@ -4,15 +4,17 @@ import { computeRepStats } from "../lib/reports";
 import { countWorkingDays } from "../lib/calendar";
 import type { ImportRow } from "../lib/import";
 import { makeLead, resetStore, store, leadById } from "./helpers";
+import { setDirectory } from "../lib/constants";
+import { DEMO_REPS } from "../lib/seed";
 
 const as = (userId: string) => useStore.setState({ currentUserId: userId });
 const pending = () => store().changeRequests.filter((c) => c.status === "pending");
 const importRow = (p: Partial<ImportRow>): ImportRow => ({
-  name: "Imported Person", title: "Founder", account: "Fresh Co", type: "Brand",
+  firstName: "Imported", lastName: "Person", title: "Founder", account: "Fresh Co", type: "Brand",
   email: "", verified: "", phone: "", city: "Pune", notes: "", ...p,
 });
 
-describe("I. Account assignment (1 account = 1 rep)", () => {
+describe("I. Account assignment (whole account; per city in LOC)", () => {
   const a = makeLead({ account: "Luma Home", ownerSince: "2026-06-01" });
   const b = makeLead({ account: "Luma Home", ownerSince: "2026-06-01" });
   beforeEach(() => resetStore([a, b]));
@@ -79,15 +81,43 @@ describe("K. Adding leads", () => {
     expect(store().createLead(input())?.assignee).toBe("priya");
   });
 
-  it("K2 rep adding at Arjun's account — it stays with Arjun", () => {
+  it("K2 rep adding in a city Arjun owns at his account — it stays with Arjun", () => {
     as("priya");
-    const l = store().createLead(input({ account: "Luma Home" }))!;
+    const l = store().createLead(input({ account: "Luma Home", city: "Mumbai" }))!;
     expect(l.assignee).toBe("arjun");
-    expect(l.activity[0].txt).toContain("Account already owned by Arjun Mehta");
+    expect(l.activity[0].txt).toContain("Luma Home · Mumbai is already owned by Arjun Mehta");
   });
 
-  it("K3 manager adding at a new account leaves it unassigned", () => {
+  it("K2b rep adding in a new city of Arjun's account — that city is hers", () => {
+    as("priya");
+    const l = store().createLead(input({ account: "Luma Home", city: "Pune" }))!;
+    expect(l.assignee).toBe("priya");
+  });
+
+  it("K2c manager adding in a new city of an assigned account — it's theirs (uploads go to the uploader)", () => {
+    const l = store().createLead(input({ account: "Luma Home", city: "Pune" }))!;
+    expect(l.assignee).toBe("meera");
+  });
+
+  it("K3 manager adding at a new account — it's theirs", () => {
+    expect(store().createLead(input())?.assignee).toBe("meera");
+  });
+
+  it("K3b ✗ with the admin's auto-assign switched off, new contacts wait unassigned", () => {
+    useStore.setState({ autoAssignUploads: false });
     expect(store().createLead(input())?.assignee).toBeNull();
+    as("priya");
+    expect(store().createLead(input({ email: "p@fresh.com", account: "Fresh Two" }))?.assignee).toBeNull();
+  });
+
+  it("K3c ✗ an admin's new contact is never theirs (admins don't own leads)", () => {
+    setDirectory([...DEMO_REPS, { id: "asha", name: "Asha", role: "Admin", color: "#000" }]);
+    try {
+      as("asha");
+      expect(store().createLead(input())?.assignee).toBeNull();
+    } finally {
+      setDirectory(DEMO_REPS);
+    }
   });
 
   it("K4 an email already in use (any case) is refused", () => {
@@ -109,7 +139,7 @@ describe("K. Adding leads", () => {
   it("K7 rep imports two contacts for one new account", () => {
     as("priya");
     const maxBefore = Math.max(...store().leads.map((l) => Number(l.id.slice(1))));
-    store().importLeads([importRow({ name: "One" }), importRow({ name: "Two" })], "sheet.xlsx");
+    store().importLeads([importRow({ lastName: "One" }), importRow({ lastName: "Two" })], "sheet.xlsx");
     const added = store().leads.filter((l) => l.account === "Fresh Co");
     expect(added.map((l) => l.assignee)).toEqual(["priya", "priya"]);
     expect(added.map((l) => Number(l.id.slice(1)))).toEqual([maxBefore + 1, maxBefore + 2]);
@@ -123,10 +153,10 @@ describe("K. Adding leads", () => {
 
   it("K9 'studio weft' joins the existing 'Studio Weft' and its owner", () => {
     as("priya");
-    store().importLeads([importRow({ account: "studio weft" })], "sheet.xlsx");
+    store().importLeads([importRow({ account: "studio weft", city: "mumbai " })], "sheet.xlsx");
     const added = store().leads.find((l) => l.name === "Imported Person")!;
     expect(added.account).toBe("Studio Weft");
-    expect(added.assignee).toBe("arjun");
+    expect(added.assignee).toBe("arjun"); // same city, however it's typed
   });
 });
 
@@ -179,7 +209,7 @@ describe("M. Edit approvals", () => {
     store().saveLeadEdit(a.id, phoneChange);
     as("meera");
     store().applyChangeRequest(pending()[0].id, true);
-    expect(leadById(a.id).phone).toBe("+91 98765 43210");
+    expect(leadById(a.id).phone).toBe("9876543210");
     expect(store().changeRequests[0].status).toBe("approved");
   });
 
@@ -193,15 +223,17 @@ describe("M. Edit approvals", () => {
 
   it("M4 a manager's edit applies immediately", () => {
     store().saveLeadEdit(a.id, phoneChange);
-    expect(leadById(a.id).phone).toBe("+91 98765 43210");
+    expect(leadById(a.id).phone).toBe("9876543210");
     expect(store().changeRequests).toHaveLength(0);
   });
 
-  it("M5 request IDs have no gaps", () => {
+  it("M5 request IDs don't collide when several people file at once", () => {
     as("priya");
     store().saveLeadEdit(a.id, phoneChange);
     store().saveAccountEdit("Studio Weft", { type: { from: "Brand", to: "Store" } });
-    expect(store().changeRequests.map((c) => c.id)).toEqual(["CR001", "CR002"]);
+    const ids = store().changeRequests.map((c) => c.id);
+    expect(ids.every((id) => /^CR-[0-9a-f]{16}$/.test(id))).toBe(true);
+    expect(new Set(ids).size).toBe(2);
   });
 
   it("M6 an approved account rename applies to every contact", () => {
@@ -279,11 +311,9 @@ describe("N. Follow-ups, notes and meetings", () => {
     expect(leadById(l.id).nextFollowup).toBe("2026-09-30");
   });
 
-  it("N4 marked contacted, with and without a next date", () => {
+  it("N4 marked contacted always sets the next follow-up date — there's no 'none needed' option", () => {
     store().markContacted(l.id, "2026-09-28");
     expect(leadById(l.id).nextFollowup).toBe("2026-09-28");
-    store().markContacted(l.id, null);
-    expect(leadById(l.id).nextFollowup).toBeNull();
   });
 
   it("N5 Priya's WhatsApp note shows up in her report stats", () => {
@@ -333,24 +363,5 @@ describe("O. Leave and holidays", () => {
   it("O6 a second holiday on the same date is refused", () => {
     expect(store().addHoliday("2026-11-01", "Test")).toBe(true);
     expect(store().addHoliday("2026-11-01", "Test again")).toBe(false);
-  });
-});
-
-describe("Q. Sign-in placeholder", () => {
-  beforeEach(() => resetStore([]));
-
-  it("Q1 signing in survives a refresh", () => {
-    store().login();
-    expect(store()).toMatchObject({ isAuthenticated: true, currentUserId: "meera" });
-    useStore.setState({ isAuthenticated: false });
-    store().hydrateAuth();
-    expect(store().isAuthenticated).toBe(true);
-  });
-
-  it("Q2 logging out survives a refresh", () => {
-    store().login();
-    store().logout();
-    store().hydrateAuth();
-    expect(store().isAuthenticated).toBe(false);
   });
 });

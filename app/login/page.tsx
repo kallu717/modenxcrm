@@ -1,6 +1,4 @@
-"use client";
-
-import { useStore } from "@/lib/store";
+import Logo from "@/components/Logo";
 
 function MicrosoftLogo() {
   return (
@@ -14,37 +12,32 @@ function MicrosoftLogo() {
 }
 
 export default function LoginPage() {
-  const login = useStore((s) => s.login);
-
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
       <div
         className="w-full max-w-sm rounded-xl p-8 text-center"
         style={{ background: "var(--surface)", border: "1px solid var(--grid)", boxShadow: "var(--shadow-lg)" }}
       >
-        <div
-          className="w-11 h-11 rounded-[10px] mx-auto flex items-center justify-center text-white font-semibold text-lg"
-          style={{ background: "var(--accent)" }}
-        >
-          M
+        <div className="flex justify-center">
+          <Logo size={44} title="bdCRM logo" />
         </div>
         <h1 className="mt-4 text-[19px] font-semibold" style={{ color: "var(--ink)" }}>
-          ModenX <span style={{ color: "var(--muted)" }}>Pipeline</span>
+          bdCRM <span style={{ color: "var(--muted)" }}>for ModenX</span>
         </h1>
         <p className="mt-1 text-[12.5px]" style={{ color: "var(--muted)" }}>
           Sign in with your ModenX work account to continue.
         </p>
 
-        {/* Placeholder: Phase 2 hands this off to Entra ID via Auth.js. */}
-        <button
-          type="button"
-          onClick={login}
+        {/* A full page load, not client routing: the server sends the browser on
+            to Microsoft and back, then sets the session cookie. */}
+        <a
+          href="/auth/login"
           className="mt-6 w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-md text-[13.5px] font-medium border"
           style={{ borderColor: "var(--rule)", background: "var(--surface)", color: "var(--ink)" }}
         >
           <MicrosoftLogo />
           Sign in with Microsoft
-        </button>
+        </a>
 
         <p className="mt-5 text-[11px]" style={{ color: "var(--muted)" }}>
           Single sign-on only. Contact your administrator if you can&apos;t access your account.

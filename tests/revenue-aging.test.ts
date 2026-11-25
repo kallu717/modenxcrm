@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  fmtInr, nextBillingDate, billedMonthsInQuarter, quarterRevenue, recentQuarters, duePayments,
+  fmtInr, nextBillingDate, billedMonthsInQuarter, quarterRevenue, recentQuarters, duePayments, paymentId,
   needsRevenueDetails, accountAgingDays, agingBucket,
 } from "../lib/revenue";
 import { buildAccounts } from "../lib/accounts";
@@ -63,14 +63,40 @@ describe("D. Subscription billing", () => {
     expect(q[5]).toEqual({ y: 2026, q: 3 });
   });
 
-  it("D12–D15 payments-due window and reminders", () => {
-    const soon = makeLead({ stage: "won", plan: "growth", mandateDate: "2026-08-26" }); // due 26 Sep
-    const later = makeLead({ stage: "won", plan: "growth", mandateDate: "2026-08-01" }); // due 1 Oct (8 days)
+  it("D12–D15 payments-due window; a reminder is noted but doesn't clear the debit", () => {
+    const soon = makeLead({ stage: "won", plan: "growth", mandateDate: "2026-09-26" }); // first debit 26 Sep
+    const later = makeLead({ stage: "won", plan: "growth", mandateDate: "2026-10-01" }); // first debit 1 Oct (8 days)
     const due = duePayments([soon, later], {});
-    expect(due.map((d) => d.lead.id)).toEqual([soon.id]); // D12 + D15
-    expect(duePayments([soon], { [soon.id]: "2026-09-26" })).toHaveLength(0); // D13
+    expect(due.map((d) => [d.lead.id, d.date])).toEqual([[soon.id, "2026-09-26"]]); // D12 + D15
+    const reminded = duePayments([soon], {}, { [soon.id]: "2026-09-26" });
+    expect(reminded).toHaveLength(1); // D13
+    expect(reminded[0].reminded).toBe(true);
     at("2026-10-23T10:00:00+05:30");
-    expect(duePayments([soon], { [soon.id]: "2026-09-26" })).toHaveLength(1); // D14
+    // D14: a month on, 26 Sep is still unpaid (overdue) and 26 Oct is coming up
+    const next = duePayments([soon], {}, { [soon.id]: "2026-09-26" });
+    expect(next.map((d) => [d.date, d.status, d.reminded])).toEqual([
+      ["2026-09-26", "overdue", true],
+      ["2026-10-26", "upcoming", false],
+    ]);
+  });
+
+  it("D17 marking a debit paid takes only that month off the list", () => {
+    const l = makeLead({ stage: "won", plan: "growth", mandateDate: "2026-08-20" });
+    at("2026-10-15T10:00:00+05:30"); // 20 Sep (overdue) and 20 Oct (upcoming), both unpaid
+    const all = duePayments([l], {});
+    expect(all.map((d) => d.date)).toEqual(["2026-09-20", "2026-10-20"]);
+    const paid = { [paymentId(l.id, "2026-09-20")]: { leadId: l.id, billingDate: "2026-09-20", amount: 3000 } };
+    expect(duePayments([l], paid).map((d) => d.date)).toEqual(["2026-10-20"]);
+  });
+
+  it("D18 ✗ debits older than 30 days, before the mandate started, or with no plan never show", () => {
+    // today is 23 Sep: the window is 24 Aug – 30 Sep
+    const dates = (p: Partial<Parameters<typeof makeLead>[0]>) => duePayments([makeLead(p)], {}).map((d) => d.date);
+    expect(dates({ stage: "won", plan: "growth", mandateDate: "2026-01-20" })).toEqual(["2026-09-20"]); // 20 Aug too old
+    expect(dates({ stage: "won", plan: "growth", mandateDate: "2026-09-25" })).toEqual(["2026-09-25"]); // first debit
+    expect(dates({ stage: "won", plan: "growth", mandateDate: "2026-10-03" })).toEqual([]); // starts later
+    expect(dates({ stage: "won", plan: null, mandateDate: "2026-01-20" })).toEqual([]);
+    expect(dates({ stage: "proposal", plan: "growth", mandateDate: "2026-01-20" })).toEqual([]);
   });
 
   it("D16 Won without a plan needs revenue details", () => {

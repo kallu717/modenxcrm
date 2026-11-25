@@ -1,5 +1,6 @@
 "use client";
 
+import Modal from "@/components/Modal";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { isoToday, isoPlusDays, nextWeekday, fmtFollowup } from "@/lib/dates";
@@ -18,28 +19,20 @@ export default function ContactedModal({ lead, onClose }: { lead: Lead; onClose:
 
   const showToast = useStore((s) => s.showToast);
 
-  const finish = (iso: string | null) => {
+  const finish = (iso: string) => {
     markContacted(lead.id, iso);
-    showToast(iso ? "Next follow-up: " + fmtFollowup(iso) : `${lead.name} marked contacted — no further follow-up`);
+    showToast("Next follow-up: " + fmtFollowup(iso));
     onClose();
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,.4)" }}
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-sm rounded-xl p-5"
-        style={{ background: "var(--surface)", boxShadow: "var(--shadow-lg)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} label={`Log ${lead.name} as contacted`} width="max-w-sm">
         <h3 className="text-[15px] font-semibold" style={{ color: "var(--ink)" }}>
           Log {lead.name} as contacted
         </h3>
         <p className="text-[12.5px] mt-1" style={{ color: "var(--muted)" }}>
-          Before this clears, set the next follow-up — or confirm there isn&apos;t one.
+          Before this clears, set the next follow-up. If there&apos;s nothing more to do here, move the stage to
+          Unqualified or Lost instead of leaving it with no follow-up.
         </p>
 
         <div className="grid grid-cols-2 gap-2 mt-4">
@@ -70,14 +63,7 @@ export default function ContactedModal({ lead, onClose }: { lead: Lead; onClose:
           />
         </div>
 
-        <div
-          className="text-center my-3"
-          style={{ color: "var(--muted)", fontSize: "11px" }}
-        >
-          or
-        </div>
-
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-2 mt-3">
           <button
             type="button"
             className="px-3 py-1.5 rounded-md text-[13px] border"
@@ -86,16 +72,7 @@ export default function ContactedModal({ lead, onClose }: { lead: Lead; onClose:
           >
             Cancel
           </button>
-          <button
-            type="button"
-            className="px-3 py-1.5 rounded-md text-[13px] border"
-            style={{ borderColor: "var(--grid)", color: "var(--ink)" }}
-            onClick={() => finish(null)}
-          >
-            No further follow-up needed
-          </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

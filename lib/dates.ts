@@ -102,5 +102,7 @@ export function fmtDueIn(iso: string): string {
   });
   if (d === 0) return "Today · " + label;
   if (d === 1) return "Tomorrow · " + label;
+  if (d === -1) return "Yesterday · " + label;
+  if (d < 0) return `${-d}d overdue · ${label}`;
   return `in ${d} days · ${label}`;
 }

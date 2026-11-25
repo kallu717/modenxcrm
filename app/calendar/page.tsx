@@ -33,7 +33,7 @@ function CalRow({
       {onDelete && (
         <button
           type="button"
-          aria-label="Remove"
+          aria-label="Remove" data-tip="Remove"
           className="ml-auto px-1.5 text-[13px]"
           style={{ color: "var(--muted)" }}
           onClick={onDelete}

@@ -16,30 +16,158 @@
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
 }
 
+/* Themes. Each person picks one under their name (top right); the choice
+   sits on <html data-theme="…"> and is remembered in this browser. With no
+   choice the app follows the device: Sage by day, Forest in dark mode.
+   The same selectors let the theme picker preview a theme on a small card. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme]) {
     --bg: #111310; --surface: #1a1c18; --surface-2: #232520;
     --ink: #f3f2ea; --ink-2: #c2c0b3; --muted: #8f8d80;
     --grid: #2c2e28; --rule: #3a3c34; --border: rgba(243, 242, 234, .10);
-    --accent: #3fae91; --accent-soft: rgba(63, 174, 145, .14); --accent-ink: #7fd4bb;
+    --accent: #3fae91; --accent-soft: rgba(63, 174, 145, .15); --accent-ink: #7fd4bb;
     --good: #3fae57; --good-soft: rgba(63, 174, 87, .14);
     --warn: #d99a30; --warn-soft: rgba(217, 154, 48, .15);
     --crit: #e05c5c; --crit-soft: rgba(224, 92, 92, .15);
     --p-hot: #e05c5c; --p-warm: #d99a30; --p-nurture: #3fae91; --p-low: #8f8d80;
     --shadow: 0 1px 2px rgba(0, 0, 0, .4); --shadow-lg: 0 16px 40px rgba(0, 0, 0, .5);
+    color-scheme: dark;
   }
 }
 
-:root[data-theme="dark"] {
+[data-theme="sage"] {
+  --bg: #f5f4ef; --surface: #ffffff; --surface-2: #ebeae2;
+  --ink: #17160f; --ink-2: #57564c; --muted: #8f8d80;
+  --grid: #dedcd0; --rule: #c7c4b3; --border: rgba(23, 22, 15, .10);
+  --accent: #1f6f5c; --accent-soft: rgba(31, 111, 92, .11); --accent-ink: #0f4c3d;
+  --good: #1f8a3d; --good-soft: rgba(31, 138, 61, .12);
+  --warn: #b9791a; --warn-soft: rgba(185, 121, 26, .13);
+  --crit: #c23b3b; --crit-soft: rgba(194, 59, 59, .12);
+  --p-hot: #c23b3b; --p-warm: #b9791a; --p-nurture: #1f6f5c; --p-low: #8f8d80;
+  --shadow: 0 1px 2px rgba(23, 22, 15, .06), 0 1px 1px rgba(23, 22, 15, .04);
+  --shadow-lg: 0 12px 32px rgba(23, 22, 15, .16);
+  color-scheme: light;
+}
+
+[data-theme="ocean"] {
+  --bg: #f2f5f9; --surface: #ffffff; --surface-2: #e4eaf2;
+  --ink: #0f1722; --ink-2: #4a5568; --muted: #8a94a6;
+  --grid: #d9e0ea; --rule: #bfc9d8; --border: rgba(23, 22, 15, .10);
+  --accent: #1f5fbf; --accent-soft: rgba(31, 95, 191, .11); --accent-ink: #123e80;
+  --good: #1f8a3d; --good-soft: rgba(31, 138, 61, .12);
+  --warn: #b9791a; --warn-soft: rgba(185, 121, 26, .13);
+  --crit: #c23b3b; --crit-soft: rgba(194, 59, 59, .12);
+  --p-hot: #c23b3b; --p-warm: #b9791a; --p-nurture: #1f5fbf; --p-low: #8a94a6;
+  --shadow: 0 1px 2px rgba(23, 22, 15, .06), 0 1px 1px rgba(23, 22, 15, .04);
+  --shadow-lg: 0 12px 32px rgba(23, 22, 15, .16);
+  color-scheme: light;
+}
+
+[data-theme="plum"] {
+  --bg: #f6f3f7; --surface: #ffffff; --surface-2: #ece6ef;
+  --ink: #1b1320; --ink-2: #5a4f60; --muted: #958a9b;
+  --grid: #e2dae6; --rule: #cbbfd1; --border: rgba(23, 22, 15, .10);
+  --accent: #7a3e9d; --accent-soft: rgba(122, 62, 157, .11); --accent-ink: #52246c;
+  --good: #1f8a3d; --good-soft: rgba(31, 138, 61, .12);
+  --warn: #b9791a; --warn-soft: rgba(185, 121, 26, .13);
+  --crit: #c23b3b; --crit-soft: rgba(194, 59, 59, .12);
+  --p-hot: #c23b3b; --p-warm: #b9791a; --p-nurture: #7a3e9d; --p-low: #958a9b;
+  --shadow: 0 1px 2px rgba(23, 22, 15, .06), 0 1px 1px rgba(23, 22, 15, .04);
+  --shadow-lg: 0 12px 32px rgba(23, 22, 15, .16);
+  color-scheme: light;
+}
+
+[data-theme="terracotta"] {
+  --bg: #faf5ef; --surface: #ffffff; --surface-2: #f1e8dd;
+  --ink: #21170f; --ink-2: #5e4d3f; --muted: #9a8a7b;
+  --grid: #eadfd2; --rule: #d6c6b4; --border: rgba(23, 22, 15, .10);
+  --accent: #b4532a; --accent-soft: rgba(180, 83, 42, .11); --accent-ink: #7a3415;
+  --good: #1f8a3d; --good-soft: rgba(31, 138, 61, .12);
+  --warn: #b9791a; --warn-soft: rgba(185, 121, 26, .13);
+  --crit: #c23b3b; --crit-soft: rgba(194, 59, 59, .12);
+  --p-hot: #c23b3b; --p-warm: #b9791a; --p-nurture: #b4532a; --p-low: #9a8a7b;
+  --shadow: 0 1px 2px rgba(23, 22, 15, .06), 0 1px 1px rgba(23, 22, 15, .04);
+  --shadow-lg: 0 12px 32px rgba(23, 22, 15, .16);
+  color-scheme: light;
+}
+
+[data-theme="slate"] {
+  --bg: #f4f5f7; --surface: #ffffff; --surface-2: #e7e9ee;
+  --ink: #14161c; --ink-2: #4f5563; --muted: #8b919e;
+  --grid: #dcdfe6; --rule: #c3c8d2; --border: rgba(23, 22, 15, .10);
+  --accent: #4b52c9; --accent-soft: rgba(75, 82, 201, .11); --accent-ink: #2e3393;
+  --good: #1f8a3d; --good-soft: rgba(31, 138, 61, .12);
+  --warn: #b9791a; --warn-soft: rgba(185, 121, 26, .13);
+  --crit: #c23b3b; --crit-soft: rgba(194, 59, 59, .12);
+  --p-hot: #c23b3b; --p-warm: #b9791a; --p-nurture: #4b52c9; --p-low: #8b919e;
+  --shadow: 0 1px 2px rgba(23, 22, 15, .06), 0 1px 1px rgba(23, 22, 15, .04);
+  --shadow-lg: 0 12px 32px rgba(23, 22, 15, .16);
+  color-scheme: light;
+}
+
+[data-theme="forest"] {
   --bg: #111310; --surface: #1a1c18; --surface-2: #232520;
   --ink: #f3f2ea; --ink-2: #c2c0b3; --muted: #8f8d80;
   --grid: #2c2e28; --rule: #3a3c34; --border: rgba(243, 242, 234, .10);
-  --accent: #3fae91; --accent-soft: rgba(63, 174, 145, .14); --accent-ink: #7fd4bb;
+  --accent: #3fae91; --accent-soft: rgba(63, 174, 145, .15); --accent-ink: #7fd4bb;
   --good: #3fae57; --good-soft: rgba(63, 174, 87, .14);
   --warn: #d99a30; --warn-soft: rgba(217, 154, 48, .15);
   --crit: #e05c5c; --crit-soft: rgba(224, 92, 92, .15);
   --p-hot: #e05c5c; --p-warm: #d99a30; --p-nurture: #3fae91; --p-low: #8f8d80;
   --shadow: 0 1px 2px rgba(0, 0, 0, .4); --shadow-lg: 0 16px 40px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+
+[data-theme="midnight"] {
+  --bg: #0d1220; --surface: #151c2e; --surface-2: #1d2539;
+  --ink: #eef2fa; --ink-2: #b8c1d6; --muted: #7d879d;
+  --grid: #263049; --rule: #323d58; --border: rgba(243, 242, 234, .10);
+  --accent: #5b9cf5; --accent-soft: rgba(91, 156, 245, .15); --accent-ink: #a5c8fb;
+  --good: #3fae57; --good-soft: rgba(63, 174, 87, .14);
+  --warn: #d99a30; --warn-soft: rgba(217, 154, 48, .15);
+  --crit: #e05c5c; --crit-soft: rgba(224, 92, 92, .15);
+  --p-hot: #e05c5c; --p-warm: #d99a30; --p-nurture: #5b9cf5; --p-low: #7d879d;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4); --shadow-lg: 0 16px 40px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+
+[data-theme="graphite"] {
+  --bg: #121212; --surface: #1c1c1c; --surface-2: #262626;
+  --ink: #f2f2f2; --ink-2: #c4c4c4; --muted: #8c8c8c;
+  --grid: #2e2e2e; --rule: #3b3b3b; --border: rgba(243, 242, 234, .10);
+  --accent: #e0a53c; --accent-soft: rgba(224, 165, 60, .15); --accent-ink: #f0cb85;
+  --good: #3fae57; --good-soft: rgba(63, 174, 87, .14);
+  --warn: #d99a30; --warn-soft: rgba(217, 154, 48, .15);
+  --crit: #e05c5c; --crit-soft: rgba(224, 92, 92, .15);
+  --p-hot: #e05c5c; --p-warm: #d99a30; --p-nurture: #e0a53c; --p-low: #8c8c8c;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4); --shadow-lg: 0 16px 40px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+
+[data-theme="aubergine"] {
+  --bg: #160f1a; --surface: #211726; --surface-2: #2b1f31;
+  --ink: #f5eef8; --ink-2: #cdbfd4; --muted: #9888a0;
+  --grid: #33263a; --rule: #433349; --border: rgba(243, 242, 234, .10);
+  --accent: #d36ba6; --accent-soft: rgba(211, 107, 166, .15); --accent-ink: #ecaacf;
+  --good: #3fae57; --good-soft: rgba(63, 174, 87, .14);
+  --warn: #d99a30; --warn-soft: rgba(217, 154, 48, .15);
+  --crit: #e05c5c; --crit-soft: rgba(224, 92, 92, .15);
+  --p-hot: #e05c5c; --p-warm: #d99a30; --p-nurture: #d36ba6; --p-low: #9888a0;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4); --shadow-lg: 0 16px 40px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+
+[data-theme="deep-sea"] {
+  --bg: #0a1517; --surface: #112023; --surface-2: #182a2e;
+  --ink: #e9f6f6; --ink-2: #b3cfd1; --muted: #7c9a9d;
+  --grid: #203538; --rule: #2b4448; --border: rgba(243, 242, 234, .10);
+  --accent: #33c3c9; --accent-soft: rgba(51, 195, 201, .15); --accent-ink: #93e3e6;
+  --good: #3fae57; --good-soft: rgba(63, 174, 87, .14);
+  --warn: #d99a30; --warn-soft: rgba(217, 154, 48, .15);
+  --crit: #e05c5c; --crit-soft: rgba(224, 92, 92, .15);
+  --p-hot: #e05c5c; --p-warm: #d99a30; --p-nurture: #33c3c9; --p-low: #7c9a9d;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4); --shadow-lg: 0 16px 40px rgba(0, 0, 0, .5);
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -87,4 +215,297 @@ button, input, select {
   font-family: inherit;
   font-size: inherit;
   color: inherit;
+}
+
+/* Dashboard grid (components/dashboard/DashboardGrid.tsx): 12 columns, each
+   widget spans --w columns and --h rows. Phones get one full-width column. */
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-flow: row dense;
+}
+.dash-item {
+  grid-column: span 12;
+  grid-row: span var(--h);
+  min-width: 0;
+}
+@media (min-width: 768px) {
+  .dash-item {
+    grid-column: span var(--w);
+  }
+}
+
+
+/* Pop-ups and the side panel (vibecodecomponents.com "Modal" and "Slide-Over
+   Panel" prompts): the page behind blurs, the pop-up fades and scales in, the
+   lead panel slides in from the right. Toasts slide up. Calmer for people who
+   ask their device for less motion. */
+.modal-backdrop,
+.drawer-backdrop,
+.drawer-backdrop-left {
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: fade-in 0.16s ease-out;
+}
+.modal-backdrop > :first-child {
+  animation: pop-in 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.drawer-backdrop > :first-child {
+  animation: slide-in-right 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.drawer-backdrop-left > :first-child {
+  animation: slide-in-left 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.toast-in {
+  animation: toast-up 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+}
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+}
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); }
+}
+@keyframes toast-up {
+  from { opacity: 0; transform: translateY(12px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop, .drawer-backdrop, .drawer-backdrop-left,
+  .modal-backdrop > :first-child, .drawer-backdrop > :first-child, .drawer-backdrop-left > :first-child,
+  .toast-in {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------- motion kit
+   Effects written for bdCRM after free, open-source patterns: Magic UI (Blur
+   Fade, Magic Card, Border Beam, Number Ticker, Animated List, Circular
+   Progress, Theme Toggler), Motion Primitives (sliding highlight) and
+   shadcn/ui (Skeleton, Tooltip, Hover Card). Colours come from the theme; all
+   of it goes still under "reduce motion" (bottom of this block). */
+
+/* Blur Fade: content rises in out of a slight blur, one after another (--i). */
+.fx-rise {
+  animation: fx-rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+/* Whole-page fade: opacity only. A transform or filter here would trap every
+   pop-up window (position: fixed) inside the page. */
+.fx-fade { animation: fx-fade 0.35s ease-out backwards; }
+@keyframes fx-fade { from { opacity: 0; } }
+
+@keyframes fx-rise {
+  from { opacity: 0; transform: translateY(8px); filter: blur(5px); }
+}
+
+/* Skeleton shimmer. */
+.fx-skeleton {
+  background: linear-gradient(100deg, var(--surface-2) 30%, color-mix(in srgb, var(--surface-2) 55%, var(--surface)) 50%, var(--surface-2) 70%);
+  background-size: 300% 100%;
+  animation: fx-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes fx-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: 0 0; }
+}
+
+/* Magic Card: a soft light follows the mouse (--mx, --my set in fx.tsx). */
+.fx-glow { position: relative; isolation: isolate; }
+.fx-glow::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.25s;
+  background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--accent) 11%, transparent), transparent 70%);
+}
+.fx-glow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  padding: 1px;
+  opacity: 0;
+  transition: opacity 0.25s;
+  background: radial-gradient(200px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--accent) 55%, transparent), transparent 70%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+@media (hover: hover) {
+  .fx-glow:hover::before, .fx-glow:hover::after { opacity: 1; }
+}
+
+/* Lift on hover for clickable cards and rows. */
+.fx-lift { transition: transform 0.18s ease, box-shadow 0.18s ease; }
+@media (hover: hover) {
+  .fx-lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+}
+
+/* Border Beam: a short light travels round the edge of a card that needs attention. */
+@property --fx-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+.fx-beam::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+  background: conic-gradient(from var(--fx-angle), transparent 0 78%, color-mix(in srgb, var(--beam, var(--crit)) 30%, transparent) 86%, var(--beam, var(--crit)) 94%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  animation: fx-beam 4.5s linear infinite;
+}
+@keyframes fx-beam {
+  to { --fx-angle: 360deg; }
+}
+
+/* Circular progress: the ring draws itself in. */
+.fx-ring {
+  transition: stroke-dashoffset 0.9s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: fx-ring-in 1s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes fx-ring-in {
+  from { stroke-dashoffset: var(--ring-from); }
+}
+
+/* Animated List: rows slide in, staggered by --i (first few only). */
+.fx-list > * {
+  animation: fx-slide-in 0.38s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.fx-list > :nth-child(2) { animation-delay: 35ms; }
+.fx-list > :nth-child(3) { animation-delay: 70ms; }
+.fx-list > :nth-child(4) { animation-delay: 105ms; }
+.fx-list > :nth-child(5) { animation-delay: 140ms; }
+.fx-list > :nth-child(n + 6) { animation-delay: 175ms; }
+@keyframes fx-slide-in {
+  from { opacity: 0; transform: translateX(-8px); }
+}
+
+/* Sliding highlight: the top menu (Masthead) and any PillTabs row (Follow-ups'
+   date range, Reports' range, Revenue's quarters, …). */
+.fx-nav-pill {
+  position: absolute;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  pointer-events: none;
+  transition: left 0.28s cubic-bezier(0.3, 0.9, 0.3, 1), top 0.28s cubic-bezier(0.3, 0.9, 0.3, 1), width 0.28s cubic-bezier(0.3, 0.9, 0.3, 1), opacity 0.2s;
+}
+
+/* Pipeline: a card being dragged lifts and tilts; a column you can drop on glows. */
+.fx-dragging {
+  transform: rotate(-2deg) scale(1.03);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.22);
+  opacity: 0.85;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+/* Tooltip: any element with data-tip shows it on hover or keyboard focus. */
+[data-tip] { position: relative; }
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 7px);
+  transform: translate(-50%, 3px);
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  background: var(--ink);
+  color: var(--bg);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s, transform 0.14s;
+  transition-delay: 0s;
+  z-index: 140;
+}
+[data-tip][data-tip-side="bottom"]::after { bottom: auto; top: calc(100% + 7px); transform: translate(-50%, -3px); }
+[data-tip]:hover::after,
+[data-tip]:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition-delay: 0.35s;
+}
+
+/* Hover card (owner details). */
+.fx-hovercard {
+  animation: pop-in 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+/* Theme change: the new theme spreads out in a circle from the click. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-new(root) {
+  animation: fx-theme-reveal 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes fx-theme-reveal {
+  from { clip-path: circle(0 at var(--reveal-x, 50%) var(--reveal-y, 50%)); }
+  to { clip-path: circle(var(--reveal-r, 150vmax) at var(--reveal-x, 50%) var(--reveal-y, 50%)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-rise, .fx-fade, .fx-list > *, .fx-ring, .fx-hovercard, ::view-transition-new(root) { animation: none; }
+  .fx-skeleton, .fx-beam::after { animation: none; }
+  .fx-nav-pill, .fx-lift, .fx-ring { transition: none; }
+  .fx-lift:hover { transform: none; }
+  .fx-dragging { transform: none; }
+}
+
+/* Bars grow in from zero. */
+.fx-bar { animation: fx-grow 0.8s cubic-bezier(0.2, 0.8, 0.2, 1); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes fx-grow { from { width: 0; } }
+@media (prefers-reduced-motion: reduce) { .fx-bar { animation: none; transition: none; } }
+
+/* A row that scrolls sideways without showing a scrollbar (top menu on narrow screens). */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+/* On narrow screens the menu fades at the right edge, a hint that it scrolls. */
+@media (max-width: 1023px) {
+  nav.no-scrollbar { mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); padding-right: 28px; }
+}
+
+/* ---- One feel for every control (low specificity, so a component's own
+   classes still win). Keyboard users get a clear ring; buttons respond to
+   hover and press; disabled ones say so. */
+:where(button, a, select, input, textarea, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+:where(input, select, textarea):focus-visible { outline-offset: 0; }
+/* A field that's focused the moment it appears (quick search opening on "/")
+   doesn't need its own ring on top of that — opt out here. */
+.fx-no-focus-ring:focus-visible { outline: none; }
+:where(button, select, [role="button"]):not(:disabled) { cursor: pointer; }
+:where(button):disabled { cursor: not-allowed; }
+:where(button) {
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s, filter 0.15s, transform 0.08s;
+}
+:where(button):not(:disabled):active { transform: scale(0.98); }
+/* Filled (accent) buttons brighten a touch on hover; outlined ones pick up the accent edge. */
+@media (hover: hover) {
+  button[style*="background: var(--accent)"]:not(:disabled):hover { filter: brightness(1.1); }
+  button.border:not(:disabled):not([style*="--good"]):not([style*="--crit"]):not([style*="--warn"]):hover { border-color: var(--accent) !important; }
+}
+::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+@media (prefers-reduced-motion: reduce) {
+  :where(button):not(:disabled):active { transform: none; }
 }

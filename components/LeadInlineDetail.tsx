@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
+import { accountHref } from "@/lib/accounts";
 import { EDITABLE_FIELDS, STAGES, repById } from "@/lib/constants";
 import { effectivePriority } from "@/lib/scoring";
 import { fmtFollowup, fmtShortDate } from "@/lib/dates";
@@ -208,8 +209,8 @@ export default function LeadInlineDetail({ lead }: { lead: Lead }) {
                 {isManager && (
                   <>
                     {" · "}
-                    <Link href={`/accounts?account=${encodeURIComponent(lead.account)}`} className="underline" style={{ color: "var(--accent-ink)" }}>
-                      manage in Accounts
+                    <Link href={accountHref(lead.account)} className="underline" style={{ color: "var(--accent-ink)" }}>
+                      open account
                     </Link>
                   </>
                 )}

@@ -1,11 +1,14 @@
 import * as XLSX from "xlsx";
 import type { AccountType, Lead } from "./types";
+import { EMAIL_RE, PHONE_RULE, phoneDigits, phoneKey } from "./phone";
 
 export const IMPORT_COLUMNS = [
-  { key: "name", header: "Contact name", required: true, example: "Ananya Sharma" },
+  { key: "firstName", header: "First name", required: true, example: "Ananya" },
+  { key: "lastName", header: "Last name", required: true, example: "Sharma" },
   { key: "title", header: "Job title", required: true, example: "Marketing Head" },
   { key: "account", header: "Account name", required: true, example: "Studio Weft" },
   { key: "type", header: "Account type", required: true, example: "Brand" },
+  // Email and Phone: each is optional, but every row needs at least one.
   { key: "email", header: "Email", required: false, example: "ananya@studioweft.com" },
   { key: "verified", header: "Email verified", required: false, example: "Yes" },
   { key: "phone", header: "Phone", required: false, example: "+91 9812345678" },
@@ -16,7 +19,8 @@ export const IMPORT_COLUMNS = [
 export const VALID_TYPES: AccountType[] = ["Brand", "Mall", "Store"];
 
 export interface ImportRow {
-  name: string;
+  firstName: string;
+  lastName: string;
   title: string;
   account: string;
   type: AccountType;
@@ -48,13 +52,16 @@ export async function readSheet(file: File): Promise<Record<string, unknown>[]> 
 }
 
 // Validate everything before touching app state, so a bad sheet can't
-// half-import. Emails already in the CRM (or repeated within the sheet) are
+// half-import. Every row needs an email or a phone number (or both). Emails
+// and phone numbers already in the CRM (or repeated within the sheet) are
 // skipped as duplicates.
 export function stageImport(raw: Record<string, unknown>[], filename: string, existing: Lead[]): StagedImport {
   const headerFor: Record<string, string> = {};
   IMPORT_COLUMNS.forEach((c) => (headerFor[c.header.toLowerCase()] = c.key));
   const existingEmails = new Set(existing.map((l) => (l.email || "").toLowerCase()).filter(Boolean));
+  const existingPhones = new Set(existing.map((l) => phoneKey(l.phone || "")).filter(Boolean));
   const seen = new Set<string>();
+  const seenPhones = new Set<string>();
   const rows: ImportRow[] = [];
   const issues: string[] = [];
   let duplicates = 0;
@@ -76,21 +83,41 @@ export function stageImport(raw: Record<string, unknown>[], filename: string, ex
       issues.push(`Row ${rowNo}: account type "${r.type}" must be Brand, Mall or Store`);
       return;
     }
+    if (!r.email && !r.phone) {
+      issues.push(`Row ${rowNo}: needs an email or a phone number`);
+      return;
+    }
+    if (r.email && !EMAIL_RE.test(r.email)) {
+      issues.push(`Row ${rowNo}: ${r.email} doesn't look like an email address`);
+      return;
+    }
+    const phone = r.phone ? phoneDigits(r.phone) : "";
+    if (phone === null) {
+      issues.push(`Row ${rowNo}: phone ${r.phone} ${PHONE_RULE}`);
+      return;
+    }
     const email = (r.email || "").toLowerCase();
     if (email && (existingEmails.has(email) || seen.has(email))) {
       duplicates++;
       issues.push(`Row ${rowNo}: ${r.email} already exists — skipped`);
       return;
     }
+    if (phone && (existingPhones.has(phone) || seenPhones.has(phone))) {
+      duplicates++;
+      issues.push(`Row ${rowNo}: phone ${phone} already exists — skipped`);
+      return;
+    }
     if (email) seen.add(email);
+    if (phone) seenPhones.add(phone);
     rows.push({
-      name: r.name,
+      firstName: r.firstName,
+      lastName: r.lastName,
       title: r.title,
       account: r.account,
       type,
       email: r.email || "",
       verified: r.verified || "",
-      phone: r.phone || "",
+      phone,
       city: r.city || "",
       notes: r.notes || "",
     });

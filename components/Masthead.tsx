@@ -2,12 +2,18 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { followupBucket } from "@/lib/dates";
 import { duePayments } from "@/lib/revenue";
+import { signOut } from "@/lib/sync";
+import { ROLE_LABELS } from "@/lib/types";
+import ThemesModal from "@/components/ThemesModal";
+import Logo from "@/components/Logo";
+import CommandPalette from "@/components/CommandPalette";
 
 const NAV_ITEMS = [
+  { href: "/dashboard", label: "Dashboard" },
   { href: "/pipeline", label: "Pipeline" },
   { href: "/leads", label: "Leads" },
   { href: "/accounts", label: "Accounts" },
@@ -15,9 +21,11 @@ const NAV_ITEMS = [
   { href: "/reports", label: "Reports", managerOnly: true },
   { href: "/revenue", label: "Revenue", managerOnly: true },
   { href: "/calendar", label: "Calendar", badge: "calendar" },
+  { href: "/settings", label: "Settings", adminOnly: true },
 ] as const;
 
 const MANAGER_ONLY_PATHS = ["/reports", "/revenue"];
+const ADMIN_ONLY_PATHS = ["/settings"];
 
 function initials(name: string): string {
   return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -26,17 +34,17 @@ function initials(name: string): string {
 export default function Masthead() {
   const pathname = usePathname();
   const router = useRouter();
-  const reps = useStore((s) => s.reps);
   const leads = useStore((s) => s.leads);
   const changeRequests = useStore((s) => s.changeRequests);
   const leaveRequests = useStore((s) => s.leaveRequests);
   const paymentReminders = useStore((s) => s.paymentReminders);
+  const payments = useStore((s) => s.payments);
   const currentUserId = useStore((s) => s.currentUserId);
-  const setCurrentUser = useStore((s) => s.setCurrentUser);
-  const logout = useStore((s) => s.logout);
   const currentUser = useStore((s) => s.currentUser());
-  const isManager = currentUser.role === "Manager";
+  const isManager = useStore((s) => s.isManager());
+  const isAdmin = useStore((s) => s.isAdmin());
   const [menuOpen, setMenuOpen] = useState(false);
+  const [themesOpen, setThemesOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Follow-ups carries edit approvals and upcoming mandate debits too, so its
@@ -49,11 +57,30 @@ export default function Masthead() {
     }).length;
     const pendingCr = changeRequests.filter((c) => c.status === "pending");
     const approvals = isManager ? pendingCr.length : pendingCr.filter((c) => c.requestedBy === currentUserId).length;
-    const payments = duePayments(scope, paymentReminders).length;
+    const paymentsDue = duePayments(scope, payments, paymentReminders).length;
     const pendingLeave = leaveRequests.filter((r) => r.status === "pending");
     const calendar = isManager ? pendingLeave.length : pendingLeave.filter((r) => r.repId === currentUserId).length;
-    return { followups: due + approvals + payments, calendar, unassigned: leads.filter((l) => !l.assignee).length };
-  }, [leads, changeRequests, leaveRequests, paymentReminders, isManager, currentUserId]);
+    return { followups: due + approvals + paymentsDue, calendar, unassigned: leads.filter((l) => !l.assignee).length };
+  }, [leads, changeRequests, leaveRequests, paymentReminders, payments, isManager, currentUserId]);
+
+  // Sliding highlight: sits under the hovered menu item, else the current page.
+  const navRef = useRef<HTMLElement>(null);
+  const [hovered, setHovered] = useState<string | null>(null);
+  const [pill, setPill] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const activeHref = NAV_ITEMS.find((i) => pathname?.startsWith(i.href))?.href ?? null;
+  const target = hovered ?? activeHref;
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const place = () => {
+      const el = target ? nav.querySelector<HTMLElement>(`[data-nav="${target}"]`) : null;
+      setPill(el ? { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight } : null);
+    };
+    place();
+    const ro = new ResizeObserver(place);
+    ro.observe(nav);
+    return () => ro.disconnect();
+  }, [target]);
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -64,52 +91,27 @@ export default function Masthead() {
   }, []);
 
   useEffect(() => {
-    if (!isManager && MANAGER_ONLY_PATHS.some((p) => pathname?.startsWith(p))) router.replace("/pipeline");
-  }, [isManager, pathname, router]);
+    const blocked =
+      (!isManager && MANAGER_ONLY_PATHS.some((p) => pathname?.startsWith(p))) ||
+      (!isAdmin && ADMIN_ONLY_PATHS.some((p) => pathname?.startsWith(p)));
+    if (blocked) router.replace("/dashboard");
+  }, [isManager, isAdmin, pathname, router]);
 
   return (
     <header className="sticky top-0 z-50 border-b" style={{ background: "var(--bg)", borderColor: "var(--grid)" }}>
-      <div className="max-w-[1320px] mx-auto px-[18px] py-2.5 flex items-center gap-6">
-        <div className="flex items-center gap-2 shrink-0">
-          <div
-            className="w-[26px] h-[26px] rounded-[7px] flex items-center justify-center text-white font-semibold text-sm"
-            style={{ background: "var(--accent)" }}
-          >
-            M
-          </div>
-          <p className="font-semibold text-[15px]" style={{ color: "var(--ink)" }}>
-            ModenX <span style={{ color: "var(--muted)" }}>Pipeline</span>
-          </p>
-        </div>
-
-        <nav className="flex items-center gap-1 flex-1 flex-wrap" aria-label="View">
-          {NAV_ITEMS.filter((item) => !("managerOnly" in item) || isManager).map((item) => {
-            const active = pathname?.startsWith(item.href);
-            const count = "badge" in item ? badges[item.badge] : 0;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-current={active ? "page" : undefined}
-                className="px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors flex items-center gap-1.5"
-                style={{
-                  color: active ? "var(--accent-ink)" : "var(--ink-2)",
-                  background: active ? "var(--accent-soft)" : "transparent",
-                }}
-              >
-                {item.label}
-                {count > 0 && (
-                  <span
-                    className="rounded-full px-1.5 font-mono text-white"
-                    style={{ background: "var(--crit)", fontSize: "10px", lineHeight: "16px" }}
-                  >
-                    {count}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
+      <div className="max-w-[1320px] mx-auto px-[18px] pt-2.5 pb-1.5 flex items-center gap-3 sm:gap-4">
+        <Link href="/dashboard" className="flex items-center gap-2 shrink-0" aria-label="bdCRM home">
+          <Logo size={26} />
+          <span className="font-semibold text-[15px]" style={{ color: "var(--ink)" }}>
+            bdCRM <span className="hidden sm:inline" style={{ color: "var(--muted)" }}>for ModenX</span>
+          </span>
+        </Link>
+        <div className="flex-1" />
+        <CommandPalette
+          pages={NAV_ITEMS.filter(
+            (item) => (!("managerOnly" in item) || isManager) && (!("adminOnly" in item) || isAdmin)
+          ).map(({ href, label }) => ({ href, label }))}
+        />
 
         {isManager && badges.unassigned > 0 && (
           <Link
@@ -122,7 +124,7 @@ export default function Masthead() {
               borderColor: "color-mix(in srgb, var(--accent) 30%, transparent)",
             }}
           >
-            ◎ {badges.unassigned} unassigned
+            ◎ {badges.unassigned}<span className="hidden sm:inline"> unassigned</span>
           </Link>
         )}
 
@@ -143,70 +145,110 @@ export default function Masthead() {
             >
               {initials(currentUser.name)}
             </span>
-            <span className="text-left leading-tight">
+            <span className="hidden md:block text-left leading-tight">
               <span className="block text-[12.5px] font-medium" style={{ color: "var(--ink)" }}>
                 {currentUser.name}
               </span>
               <span className="block font-mono uppercase tracking-wide" style={{ fontSize: "10px", color: "var(--muted)" }}>
-                {currentUser.role}
+                {ROLE_LABELS[currentUser.role]}
               </span>
             </span>
           </button>
           {menuOpen && (
             <div
               role="menu"
-              className="absolute right-0 mt-1 w-60 rounded-lg border overflow-hidden"
+              className="absolute right-0 mt-1 w-60 rounded-lg border overflow-hidden z-[60]"
               style={{ background: "var(--surface)", borderColor: "var(--grid)", boxShadow: "var(--shadow-lg)" }}
             >
-              <p
-                className="px-3 pt-2.5 pb-1 font-mono uppercase tracking-wide"
-                style={{ fontSize: "9.5px", color: "var(--muted)" }}
+              {/* Role comes from the server (an Admin sets it in Settings); there is no way to switch it here. */}
+              <button
+                type="button"
+                role="menuitem"
+                className="w-full px-3 py-2.5 text-left text-[13px] font-medium border-b"
+                style={{ color: "var(--ink)", borderColor: "var(--grid)" }}
+                onClick={() => {
+                  setMenuOpen(false);
+                  setThemesOpen(true);
+                }}
               >
-                Switch user (testing)
-              </p>
-              {reps.map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  role="menuitem"
-                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-[13px]"
-                  style={{ color: "var(--ink)", background: r.id === currentUserId ? "var(--accent-soft)" : "transparent" }}
-                  onClick={() => {
-                    setCurrentUser(r.id);
-                    setMenuOpen(false);
-                  }}
-                >
-                  <span
-                    className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-semibold"
-                    style={{ background: r.color }}
-                  >
-                    {initials(r.name)}
-                  </span>
-                  <span>{r.name}</span>
-                  <span className="ml-auto font-mono uppercase" style={{ fontSize: "9.5px", color: "var(--muted)" }}>
-                    {r.role}
-                  </span>
-                </button>
-              ))}
-              <div className="border-t" style={{ borderColor: "var(--grid)" }}>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="w-full px-3 py-2.5 text-left text-[13px] font-medium"
-                  style={{ color: "var(--crit)" }}
-                  onClick={() => {
-                    setMenuOpen(false);
-                    logout();
-                    router.replace("/login");
-                  }}
-                >
-                  Log out
-                </button>
-              </div>
+                Themes
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="w-full px-3 py-2.5 text-left text-[13px] font-medium border-b"
+                style={{ color: "var(--ink)", borderColor: "var(--grid)" }}
+                onClick={() => {
+                  setMenuOpen(false);
+                  router.push("/scoring-guide");
+                }}
+              >
+                ℹ How scoring works
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="w-full px-3 py-2.5 text-left text-[13px] font-medium"
+                style={{ color: "var(--crit)" }}
+                onClick={() => {
+                  setMenuOpen(false);
+                  void signOut();
+                }}
+              >
+                Log out
+              </button>
             </div>
           )}
         </div>
       </div>
+
+      <div className="max-w-[1320px] mx-auto px-[18px]">
+        <nav
+          ref={navRef}
+          className="no-scrollbar relative flex items-center gap-1 overflow-x-auto -mx-1 px-1 pb-2"
+          aria-label="View"
+          onMouseLeave={() => setHovered(null)}
+        >
+          <span
+            aria-hidden
+            className="fx-nav-pill"
+            style={{ left: pill?.left ?? 0, top: pill?.top ?? 0, width: pill?.width ?? 0, height: pill?.height ?? 0, opacity: pill ? 1 : 0 }}
+          />
+          {NAV_ITEMS.filter(
+            (item) => (!("managerOnly" in item) || isManager) && (!("adminOnly" in item) || isAdmin)
+          ).map((item) => {
+            const active = pathname?.startsWith(item.href);
+            const count = "badge" in item ? badges[item.badge] : 0;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                data-nav={item.href}
+                onMouseEnter={() => setHovered(item.href)}
+                onFocus={() => setHovered(item.href)}
+                onBlur={() => setHovered(null)}
+                className="relative shrink-0 whitespace-nowrap px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors flex items-center gap-1.5"
+                style={{
+                  color: active || hovered === item.href ? "var(--accent-ink)" : "var(--ink-2)",
+                }}
+              >
+                {item.label}
+                {count > 0 && (
+                  <span
+                    className="rounded-full px-1.5 font-mono text-white"
+                    style={{ background: "var(--crit)", fontSize: "10px", lineHeight: "16px" }}
+                  >
+                    {count}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </nav>
+
+      </div>
+      {themesOpen && <ThemesModal onClose={() => setThemesOpen(false)} />}
     </header>
   );
 }
