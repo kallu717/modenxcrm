@@ -77,8 +77,11 @@ export interface Lead {
   wonAt: string | null;
   assignee: string | null; // rep id
   ownerSince: string | null; // ISO date
-  plan: string | null; // plan id
+  createdBy: string | null; // user id of whoever added or imported this contact
+  plan: string | null; // plan id, or "pilot"
   mandateDate: string | null; // ISO date
+  pilotStartDate: string | null; // ISO date — only set when plan is "pilot"
+  pilotEndDate: string | null; // ISO date — only set when plan is "pilot"
   createdAt: string; // ISO date
   nextFollowup: string | null;
   meetings: Meeting[];

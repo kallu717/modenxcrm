@@ -394,7 +394,8 @@ button, input, select {
   from { opacity: 0; transform: translateX(-8px); }
 }
 
-/* Sliding nav highlight (Masthead). */
+/* Sliding highlight: the top menu (Masthead) and any PillTabs row (Follow-ups'
+   date range, Reports' range, Revenue's quarters, …). */
 .fx-nav-pill {
   position: absolute;
   border-radius: 6px;
@@ -490,6 +491,9 @@ button, input, select {
   outline-offset: 2px;
 }
 :where(input, select, textarea):focus-visible { outline-offset: 0; }
+/* A field that's focused the moment it appears (quick search opening on "/")
+   doesn't need its own ring on top of that — opt out here. */
+.fx-no-focus-ring:focus-visible { outline: none; }
 :where(button, select, [role="button"]):not(:disabled) { cursor: pointer; }
 :where(button):disabled { cursor: not-allowed; }
 :where(button) {

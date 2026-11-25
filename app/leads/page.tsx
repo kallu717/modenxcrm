@@ -4,7 +4,7 @@ import { Suspense, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { EMPTY_FILTERS, filterLeads, parseFilters, type FilterState } from "@/lib/filters";
-import { STAGES, assignableList } from "@/lib/constants";
+import { STAGES, assignableList, directoryList } from "@/lib/constants";
 import {
   applyFieldCriteria,
   buildFilterFields,
@@ -65,9 +65,12 @@ function LeadsView() {
   const [showNewLead, setShowNewLead] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showFieldFilter, setShowFieldFilter] = useState(false);
+  // Bumped by Reset, so the panel (which otherwise stays mounted to keep an
+  // unapplied draft around) remounts with a clean slate.
+  const [fieldFilterResetKey, setFieldFilterResetKey] = useState(0);
 
   const fields = useMemo(
-    () => buildFilterFields(STAGES, assignableList()).filter((f) => !f.managerOnly || isManager),
+    () => buildFilterFields(STAGES, assignableList(), directoryList()).filter((f) => !f.managerOnly || isManager),
     [isManager]
   );
   const fieldsByKey = useMemo(() => fieldsByKeyMap(fields), [fields]);
@@ -139,35 +142,42 @@ function LeadsView() {
         value={filters}
         onChange={setFilters}
         cities={cities}
+        quickFilters={false}
         fieldFilterCount={fieldCriteria.length}
-        onOpenFieldFilter={() => setShowFieldFilter(true)}
+        onOpenFieldFilter={() => setShowFieldFilter((v) => !v)}
+        onResetFieldFilter={() => {
+          setFieldCriteria([]);
+          setFieldFilterResetKey((k) => k + 1);
+        }}
       />
 
-      <div ref={listTop} className="scroll-mt-24">
-        <LeadsTable leads={shown} />
+      <div className="flex items-start gap-4 mt-1">
+        <AdvancedFilterPanel
+          key={fieldFilterResetKey}
+          open={showFieldFilter}
+          fields={fields}
+          criteria={fieldCriteria}
+          onApply={setFieldCriteria}
+          onClose={() => setShowFieldFilter(false)}
+        />
+
+        <div className="min-w-0 flex-1">
+          <div ref={listTop} className="scroll-mt-24">
+            <LeadsTable leads={shown} />
+          </div>
+          <Pager
+            page={paging.page}
+            size={paging.size}
+            total={filtered.length}
+            noun={["lead", "leads"]}
+            onPage={goToPage}
+            onSize={paging.setSize}
+          />
+        </div>
       </div>
-      <Pager
-        page={paging.page}
-        size={paging.size}
-        total={filtered.length}
-        noun={["lead", "leads"]}
-        onPage={goToPage}
-        onSize={paging.setSize}
-      />
 
       {showNewLead && <NewLeadModal onClose={() => setShowNewLead(false)} />}
       {showImport && <ImportModal onClose={() => setShowImport(false)} />}
-      {showFieldFilter && (
-        <AdvancedFilterPanel
-          fields={fields}
-          criteria={fieldCriteria}
-          onApply={(next) => {
-            setFieldCriteria(next);
-            setShowFieldFilter(false);
-          }}
-          onClose={() => setShowFieldFilter(false)}
-        />
-      )}
     </div>
   );
 }

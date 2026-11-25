@@ -6,6 +6,7 @@ import { sellersList, repById } from "@/lib/constants";
 import { needsRevenueDetails } from "@/lib/revenue";
 import {
   PLANS,
+  PILOT_PLAN_ID,
   fmtInr,
   leadMrr,
   planById,
@@ -19,6 +20,7 @@ import {
 } from "@/lib/revenue";
 import { fmtShortDate } from "@/lib/dates";
 import WonModal from "@/components/WonModal";
+import PillTabs from "@/components/PillTabs";
 
 function initials(name: string): string {
   return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -33,7 +35,8 @@ export default function RevenuePage() {
   const [revQuarter, setRevQuarter] = useState(currentQuarter());
   const [fixLead, setFixLead] = useState<string | null>(null);
 
-  const subs = useMemo(() => leads.filter((l) => l.stage === "won" && l.plan), [leads]);
+  // A pilot isn't billed yet, so it's left out of every revenue figure here.
+  const subs = useMemo(() => leads.filter((l) => l.stage === "won" && l.plan && l.plan !== PILOT_PLAN_ID), [leads]);
   const missing = useMemo(() => leads.filter(needsRevenueDetails), [leads]);
   const { y, q } = revQuarter;
 
@@ -118,23 +121,14 @@ export default function RevenuePage() {
       )}
 
       <div className="flex items-center gap-1 flex-wrap mb-1">
-        {quarters.map((x) => {
-          const sel = x.y === y && x.q === q;
-          return (
-            <button
-              key={quarterKey(x.y, x.q)}
-              type="button"
-              className="px-2.5 py-1 rounded-md text-[12px]"
-              style={{
-                background: sel ? "var(--accent-soft)" : "transparent",
-                color: sel ? "var(--accent-ink)" : "var(--ink-2)",
-              }}
-              onClick={() => setRevQuarter({ y: x.y, q: x.q })}
-            >
-              {quarterLabel(x.y, x.q)}
-            </button>
-          );
-        })}
+        <PillTabs
+          items={quarters.map((x) => ({ key: quarterKey(x.y, x.q), label: quarterLabel(x.y, x.q) }))}
+          active={quarterKey(y, q)}
+          onChange={(key) => {
+            const x = quarters.find((qq) => quarterKey(qq.y, qq.q) === key);
+            if (x) setRevQuarter({ y: x.y, q: x.q });
+          }}
+        />
         <span className="font-mono ml-1" style={{ fontSize: "11px", color: "var(--muted)" }}>
           {quarterRangeLabel(y, q)}
           {isCurrentQ ? " · in progress" : ""}

@@ -17,13 +17,36 @@ export function planById(id: string | null): Plan | null {
   return PLANS.find((p) => p.id === id) || null;
 }
 
+// A pilot isn't a paid plan — kept apart from PLANS so it never shows up as
+// revenue, in the plan mix, or in a billing mandate. "Pilot" is the only
+// label for it; nothing else calls it that.
+export const PILOT_PLAN_ID = "pilot";
+
+export function isPilot(l: { plan: string | null }): boolean {
+  return l.plan === PILOT_PLAN_ID;
+}
+
+// The label to show for a lead's plan, pilot included (planById alone
+// doesn't know about it, since it isn't a real plan).
+export function planLabel(id: string | null): string | null {
+  if (id === PILOT_PLAN_ID) return "Pilot";
+  return planById(id)?.name ?? null;
+}
+
 export function leadMrr(l: { plan: string | null }): number {
   const p = planById(l.plan);
   return p ? p.mrr : 0;
 }
 
-export function needsRevenueDetails(l: { stage: string; plan: string | null }): boolean {
-  return l.stage === "won" && !l.plan;
+// A pilot that has run past its end date without a real plan chosen yet.
+export function pilotEnded(l: { plan: string | null; pilotEndDate?: string | null }): boolean {
+  return isPilot(l) && !!l.pilotEndDate && l.pilotEndDate < isoToday();
+}
+
+export function needsRevenueDetails(l: { stage: string; plan: string | null; pilotEndDate?: string | null }): boolean {
+  if (l.stage !== "won") return false;
+  if (isPilot(l)) return pilotEnded(l);
+  return !l.plan;
 }
 
 // The mandate debits on the same day each month. Returns the next debit date

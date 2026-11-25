@@ -5,8 +5,8 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { STAGES, repById } from "@/lib/constants";
 import { effectivePriority } from "@/lib/scoring";
-import { fmtFollowup } from "@/lib/dates";
-import { planById, fmtInr, needsRevenueDetails } from "@/lib/revenue";
+import { fmtFollowup, fmtShortDate } from "@/lib/dates";
+import { isPilot, planLabel, fmtInr, leadMrr, needsRevenueDetails } from "@/lib/revenue";
 import type { Lead, Stage } from "@/lib/types";
 import WonModal from "./WonModal";
 import LeadDrawer from "./LeadDrawer";
@@ -97,14 +97,21 @@ function LeadCard({
           className="mt-1.5 rounded px-1.5 py-1 font-mono w-fit"
           style={{ fontSize: "10.5px", background: "var(--warn-soft)", color: "var(--warn)" }}
         >
-          ⚠ Subscription needed
+          ⚠ {isPilot(lead) ? "Pilot ended — add subscription" : "Subscription needed"}
+        </div>
+      ) : isPilot(lead) ? (
+        <div
+          className="mt-1.5 rounded px-1.5 py-1 font-mono w-fit"
+          style={{ fontSize: "10.5px", background: "var(--accent-soft)", color: "var(--accent-ink)" }}
+        >
+          Pilot · ends {lead.pilotEndDate ? fmtShortDate(lead.pilotEndDate) : "—"}
         </div>
       ) : lead.stage === "won" && lead.plan ? (
         <div
           className="mt-1.5 rounded px-1.5 py-1 font-mono w-fit"
           style={{ fontSize: "10.5px", background: "var(--good-soft)", color: "var(--good)" }}
         >
-          {planById(lead.plan)?.name} · {fmtInr(lead.plan ? planById(lead.plan)!.mrr : 0)}/mo
+          {planLabel(lead.plan)} · {fmtInr(leadMrr(lead))}/mo
         </div>
       ) : null}
       {rep && (

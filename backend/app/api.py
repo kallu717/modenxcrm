@@ -509,8 +509,10 @@ def process_rows(db: Session, user: User, rows: list[LeadIn], source: str, *, dr
             "stage": "new",
             "assignee": str(assignee) if assignee is not None else None,
             "ownerSince": today if assignee is not None else None,
+            "createdBy": str(user.id),
             "priorityOverride": None, "nextFollowup": None, "meetings": [],
-            "createdAt": today, "plan": None, "mandateDate": None, "wonAt": None,
+            "createdAt": today, "plan": None, "mandateDate": None,
+            "pilotStartDate": None, "pilotEndDate": None, "wonAt": None,
             "stageHistory": [{"stage": "new", "date": today}],
             "activity": [{"who": "System", "txt": " ".join(bits), "t": "just now", "date": today, "method": None}],
         }

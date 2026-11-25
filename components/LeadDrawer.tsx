@@ -8,8 +8,9 @@ import { accountHref } from "@/lib/accounts";
 import { STAGES, PRIORITIES, MEETING_MODES, CONTACT_METHODS, repById } from "@/lib/constants";
 import { effectivePriority, bandForScore } from "@/lib/scoring";
 import { fmtShortDate, fmtFollowup, followupBucket, isoToday, isoPlusDays, nextWeekday } from "@/lib/dates";
-import { planById, fmtInr, leadMrr, needsRevenueDetails } from "@/lib/revenue";
+import { planLabel, isPilot, pilotEnded, fmtInr, leadMrr, needsRevenueDetails } from "@/lib/revenue";
 import WonModal from "./WonModal";
+import RenewPilotModal from "./RenewPilotModal";
 
 function initials(name: string): string {
   return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -58,6 +59,7 @@ export default function LeadDrawer({ leadId, onClose }: { leadId: string; onClos
   const showToast = useStore((s) => s.showToast);
 
   const [wonModal, setWonModal] = useState(false);
+  const [renewPilotOpen, setRenewPilotOpen] = useState(false);
   const [mtgDate, setMtgDate] = useState(isoToday());
   const [mtgTime, setMtgTime] = useState("11:00");
   const [mtgMode, setMtgMode] = useState(MEETING_MODES[0]);
@@ -138,7 +140,7 @@ export default function LeadDrawer({ leadId, onClose }: { leadId: string; onClos
                 onClick={() => {
                   if (s.id === lead.stage) return;
                   setLeadStage(lead.id, s.id);
-                  if (needsRevenueDetails({ stage: s.id, plan: lead.plan })) setWonModal(true);
+                  if (needsRevenueDetails({ stage: s.id, plan: lead.plan, pilotEndDate: lead.pilotEndDate })) setWonModal(true);
                 }}
               >
                 {s.name}
@@ -149,10 +151,30 @@ export default function LeadDrawer({ leadId, onClose }: { leadId: string; onClos
 
         {lead.stage === "won" && (
           <Section title="Subscription">
-            {lead.plan ? (
+            {isPilot(lead) ? (
+              <>
+                <dl className="text-[12.5px] space-y-1">
+                  {[
+                    ["Plan", "Pilot (not billed)"],
+                    ["Pilot start", lead.pilotStartDate ? fmtShortDate(lead.pilotStartDate) : "—"],
+                    ["Pilot end", lead.pilotEndDate ? fmtShortDate(lead.pilotEndDate) : "—"],
+                  ].map(([k, v]) => (
+                    <div key={k} className="flex justify-between gap-3">
+                      <dt style={{ color: "var(--muted)" }}>{k}</dt>
+                      <dd style={{ color: "var(--ink)" }}>{v}</dd>
+                    </div>
+                  ))}
+                </dl>
+                {pilotEnded(lead) && (
+                  <p className="text-[12px] mt-1.5" style={{ color: "var(--warn)" }}>
+                    ⚠ Pilot ended — add real subscription details
+                  </p>
+                )}
+              </>
+            ) : lead.plan ? (
               <dl className="text-[12.5px] space-y-1">
                 {[
-                  ["Plan", planById(lead.plan)?.name],
+                  ["Plan", planLabel(lead.plan)],
                   ["Monthly value", fmtInr(leadMrr(lead))],
                   ["Mandate from", lead.mandateDate ? fmtShortDate(lead.mandateDate) : "—"],
                   ["Per quarter", fmtInr(leadMrr(lead) * 3)],
@@ -166,14 +188,26 @@ export default function LeadDrawer({ leadId, onClose }: { leadId: string; onClos
             ) : (
               <p className="text-[12px]" style={{ color: "var(--warn)" }}>⚠ No subscription recorded</p>
             )}
-            <button
-              type="button"
-              className="mt-2 px-2.5 py-1 rounded text-[12px] border"
-              style={{ borderColor: "var(--grid)", color: "var(--ink)" }}
-              onClick={() => setWonModal(true)}
-            >
-              {lead.plan ? "Change plan" : "Add subscription details"}
-            </button>
+            <div className="flex items-center gap-2 mt-2">
+              {isPilot(lead) && (
+                <button
+                  type="button"
+                  className="px-2.5 py-1 rounded text-[12px] border"
+                  style={{ borderColor: "var(--grid)", color: "var(--ink)" }}
+                  onClick={() => setRenewPilotOpen(true)}
+                >
+                  Renew pilot
+                </button>
+              )}
+              <button
+                type="button"
+                className="px-2.5 py-1 rounded text-[12px] border"
+                style={{ borderColor: "var(--grid)", color: "var(--ink)" }}
+                onClick={() => setWonModal(true)}
+              >
+                {isPilot(lead) ? "Add real subscription" : lead.plan ? "Change plan" : "Add subscription details"}
+              </button>
+            </div>
           </Section>
         )}
 
@@ -380,6 +414,11 @@ export default function LeadDrawer({ leadId, onClose }: { leadId: string; onClos
       {wonModal && (
         <div onClick={(e) => e.stopPropagation()}>
           <WonModal lead={lead} onClose={() => setWonModal(false)} />
+        </div>
+      )}
+      {renewPilotOpen && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <RenewPilotModal lead={lead} onClose={() => setRenewPilotOpen(false)} />
         </div>
       )}
     </div>

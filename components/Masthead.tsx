@@ -176,6 +176,18 @@ export default function Masthead() {
               <button
                 type="button"
                 role="menuitem"
+                className="w-full px-3 py-2.5 text-left text-[13px] font-medium border-b"
+                style={{ color: "var(--ink)", borderColor: "var(--grid)" }}
+                onClick={() => {
+                  setMenuOpen(false);
+                  router.push("/scoring-guide");
+                }}
+              >
+                ℹ How scoring works
+              </button>
+              <button
+                type="button"
+                role="menuitem"
                 className="w-full px-3 py-2.5 text-left text-[13px] font-medium"
                 style={{ color: "var(--crit)" }}
                 onClick={() => {

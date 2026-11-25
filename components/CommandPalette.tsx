@@ -170,7 +170,7 @@ export default function CommandPalette({ pages }: { pages: PageItem[] }) {
                 }}
                 onKeyDown={onKeyDown}
                 placeholder="Search contacts, accounts, pages…"
-                className="flex-1 py-3 bg-transparent outline-none text-[14px]"
+                className="flex-1 py-3 bg-transparent outline-none fx-no-focus-ring text-[14px]"
                 style={{ color: "var(--ink)" }}
                 role="combobox"
                 aria-expanded="true"

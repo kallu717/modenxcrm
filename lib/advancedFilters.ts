@@ -96,9 +96,19 @@ export function ownerOptions(reps: { id: string; name: string }[]): FilterOption
   return [{ value: "__unassigned", label: "Unassigned" }, ...reps.map((r) => ({ value: r.id, label: r.name }))];
 }
 
-// The catalog is built per page (stages and reps vary with the live data /
-// who's signed in), not kept as one static constant.
-export function buildFilterFields(stages: { id: string; name: string }[], reps: { id: string; name: string }[]): FilterFieldDef[] {
+export function peopleOptions(people: { id: string; name: string }[]): FilterOption[] {
+  return people.map((p) => ({ value: p.id, label: p.name }));
+}
+
+// The catalog is built per page (stages and people vary with the live data /
+// who's signed in), not kept as one static constant. `reps` is who a lead can
+// be owned by (reps and managers); `allUsers` is everyone who can sign in, for
+// "who added this" — any role can add or import a contact.
+export function buildFilterFields(
+  stages: { id: string; name: string }[],
+  reps: { id: string; name: string }[],
+  allUsers: { id: string; name: string }[] = reps
+): FilterFieldDef[] {
   return [
     { key: "name", label: "Contact name", group: "Contact", type: "text" },
     { key: "title", label: "Job title", group: "Contact", type: "text" },
@@ -113,6 +123,7 @@ export function buildFilterFields(stages: { id: string; name: string }[], reps: 
     { key: "priority", label: "Priority", group: "Pipeline", type: "select", options: PRIORITY_OPTIONS },
     { key: "score", label: "Score", group: "Pipeline", type: "number" },
     { key: "assignee", label: "Owner", group: "Pipeline", type: "select", options: ownerOptions(reps), managerOnly: true },
+    { key: "createdBy", label: "Created by", group: "Pipeline", type: "select", options: peopleOptions(allUsers) },
     { key: "createdAt", label: "Created on", group: "Dates", type: "date" },
     { key: "ownerSince", label: "Owner since", group: "Dates", type: "date" },
     { key: "nextFollowup", label: "Next follow-up", group: "Dates", type: "date" },

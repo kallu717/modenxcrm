@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
-import { STAGES, assignableList } from "@/lib/constants";
+import { STAGES, assignableList, directoryList } from "@/lib/constants";
 import { locationKey, type AccountSummary } from "@/lib/accounts";
 import { effectivePriority } from "@/lib/scoring";
 import { fmtFollowup } from "@/lib/dates";
@@ -20,11 +20,15 @@ export default function AccountContacts({
   cityKey,
   onCityChange,
   onOpenLead,
+  initialCriteria,
 }: {
   account: AccountSummary;
   cityKey: string | null;
   onCityChange: (key: string | null) => void;
   onOpenLead: (id: string) => void;
+  // A filter carried over from the Accounts list, so this already shows the
+  // same narrowed-down contacts instead of starting from every one again.
+  initialCriteria?: FieldCriterion[];
 }) {
   const router = useRouter();
   const isManager = useStore((s) => s.isManager());
@@ -36,13 +40,13 @@ export default function AccountContacts({
   // the same account, so filtering by either would do nothing.
   const fields = useMemo(
     () =>
-      buildFilterFields(STAGES, assignableList()).filter(
+      buildFilterFields(STAGES, assignableList(), directoryList()).filter(
         (f) => (!f.managerOnly || isManager) && f.key !== "account" && f.key !== "type"
       ),
     [isManager]
   );
   const fieldsByKey = useMemo(() => fieldsByKeyMap(fields), [fields]);
-  const [criteria, setCriteria] = useState<FieldCriterion[]>([]);
+  const [criteria, setCriteria] = useState<FieldCriterion[]>(initialCriteria ?? []);
   const [showFilter, setShowFilter] = useState(false);
 
   const contacts = useMemo(
@@ -56,17 +60,13 @@ export default function AccountContacts({
   );
 
   return (
-    <section
-      id="account-contacts"
-      className="rounded-lg border"
-      style={{ borderColor: "var(--grid)", background: "var(--surface)" }}
-    >
-      <div className="flex items-center justify-between gap-3 flex-wrap p-4 pb-3">
+    <div>
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
         <h2 className="text-[14px] font-semibold" style={{ color: "var(--ink)" }}>
           Contacts{" "}
           <span className="font-normal text-[12px]" style={{ color: "var(--muted)" }}>
             · {contacts.length}
-            {cityKey !== null ? ` of ${account.contacts.length}` : ""}
+            {cityKey !== null || criteria.length > 0 ? ` of ${account.contacts.length}` : ""}
           </span>
         </h2>
         <div className="flex items-center gap-2">
@@ -92,7 +92,7 @@ export default function AccountContacts({
             type="button"
             className="px-2.5 py-1.5 rounded-md text-[12.5px] border flex items-center gap-1.5"
             style={{ borderColor: "var(--grid)", color: "var(--ink)", background: "var(--surface)" }}
-            onClick={() => setShowFilter(true)}
+            onClick={() => setShowFilter((v) => !v)}
             data-tip="Build a filter from any field"
           >
             ⚙ Filter by field
@@ -108,18 +108,20 @@ export default function AccountContacts({
         </div>
       </div>
 
-      {showFilter && (
+      <div className="flex items-start gap-4">
         <AdvancedFilterPanel
+          open={showFilter}
           fields={fields}
           criteria={criteria}
-          onApply={(next) => {
-            setCriteria(next);
-            setShowFilter(false);
-          }}
+          onApply={setCriteria}
           onClose={() => setShowFilter(false)}
         />
-      )}
-      <div className="overflow-x-auto max-h-[520px] overflow-y-auto" style={{ borderTop: "1px solid var(--grid)" }}>
+        <section
+          id="account-contacts"
+          className="rounded-lg border flex-1 min-w-0"
+          style={{ borderColor: "var(--grid)", background: "var(--surface)" }}
+        >
+      <div className="overflow-x-auto max-h-[520px] overflow-y-auto">
         <table className="w-full text-[12.5px]" style={{ borderCollapse: "collapse" }}>
           <thead className="sticky top-0 z-[1]" style={{ background: "var(--surface-2)", color: "var(--muted)" }}>
             <tr>
@@ -183,6 +185,8 @@ export default function AccountContacts({
           </tbody>
         </table>
       </div>
-    </section>
+        </section>
+      </div>
+    </div>
   );
 }

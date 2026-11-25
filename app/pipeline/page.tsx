@@ -3,7 +3,10 @@
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { EMPTY_FILTERS, filterLeads, type FilterState } from "@/lib/filters";
+import { STAGES, assignableList, directoryList } from "@/lib/constants";
+import { applyFieldCriteria, buildFilterFields, fieldsByKeyMap, type FieldCriterion } from "@/lib/advancedFilters";
 import FilterBar from "@/components/FilterBar";
+import AdvancedFilterPanel from "@/components/AdvancedFilterPanel";
 import StatsHeader from "@/components/StatsHeader";
 import KanbanBoard from "@/components/KanbanBoard";
 
@@ -16,12 +19,23 @@ export default function PipelinePage() {
     [leads, isManager, currentUserId]
   );
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
+  const [showFieldFilter, setShowFieldFilter] = useState(false);
+  const [fieldFilterResetKey, setFieldFilterResetKey] = useState(0);
+  const fields = useMemo(
+    () => buildFilterFields(STAGES, assignableList(), directoryList()).filter((f) => !f.managerOnly || isManager),
+    [isManager]
+  );
+  const fieldsByKey = useMemo(() => fieldsByKeyMap(fields), [fields]);
+  const [fieldCriteria, setFieldCriteria] = useState<FieldCriterion[]>([]);
 
   const cities = useMemo(
     () => Array.from(new Set(visibleLeads.map((l) => l.city))).sort(),
     [visibleLeads]
   );
-  const filtered = useMemo(() => filterLeads(visibleLeads, filters), [visibleLeads, filters]);
+  const filtered = useMemo(
+    () => applyFieldCriteria(filterLeads(visibleLeads, filters), fieldCriteria, fieldsByKey),
+    [visibleLeads, filters, fieldCriteria, fieldsByKey]
+  );
 
   return (
     <div className="py-5">
@@ -37,9 +51,33 @@ export default function PipelinePage() {
         <StatsHeader />
       </div>
 
-      <FilterBar value={filters} onChange={setFilters} cities={cities} />
+      <FilterBar
+        value={filters}
+        onChange={setFilters}
+        cities={cities}
+        quickFilters={false}
+        fieldFilterCount={fieldCriteria.length}
+        onOpenFieldFilter={() => setShowFieldFilter((v) => !v)}
+        onResetFieldFilter={() => {
+          setFieldCriteria([]);
+          setFieldFilterResetKey((k) => k + 1);
+        }}
+      />
 
-      <KanbanBoard leads={filtered} />
+      <div className="flex items-start gap-4 mt-1">
+        <AdvancedFilterPanel
+          key={fieldFilterResetKey}
+          open={showFieldFilter}
+          fields={fields}
+          criteria={fieldCriteria}
+          onApply={setFieldCriteria}
+          onClose={() => setShowFieldFilter(false)}
+        />
+
+        <div className="min-w-0 flex-1">
+          <KanbanBoard leads={filtered} />
+        </div>
+      </div>
     </div>
   );
 }

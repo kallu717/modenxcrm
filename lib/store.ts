@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { isoToday, isoPlusDays, fmtShortDate, fmtFollowup, to12h } from "./dates";
 import { scoreLead, bandForScore } from "./scoring";
-import { PLANS, fmtInr, leadMrr, paymentId } from "./revenue";
+import { PLANS, PILOT_PLAN_ID, fmtInr, leadMrr, paymentId } from "./revenue";
 import { STAGES, EDITABLE_FIELDS, ACCOUNT_EDITABLE_FIELDS, repById } from "./constants";
 import { newId } from "./ids";
 import { EMAIL_RE, PHONE_RULE, phoneDigits, phoneKey } from "./phone";
@@ -181,6 +181,8 @@ interface StoreState {
   setMeetingStatus: (leadId: string, meetingId: string, status: "done" | "cancelled") => void;
   addNote: (leadId: string, txt: string, method: string) => void;
   setLeadPlan: (leadId: string, planId: string, mandateDate: string) => void;
+  setLeadPilot: (leadId: string, pilotStartDate: string, pilotEndDate: string) => void;
+  renewPilot: (leadId: string, newEndDate: string) => string | null;
   // createLead and importLeads are the offline versions, kept for the tests.
   // The app creates leads on the server (lib/api.ts), which assigns the ids
   // and checks duplicates across everyone's leads, then calls addLeads.
@@ -422,14 +424,69 @@ export const useStore = create<StoreState>((set, get) => ({
       leads: s.leads.map((l) => {
         if (l.id !== leadId) return l;
         const txt = `Subscription set — ${planDef.name} at ${fmtInr(planDef.mrr)}/month, mandate from ${fmtShortDate(mandateDate)}.`;
+        // A real plan replaces a pilot: the pilot-end reminder (if that's
+        // still what nextFollowup is) has done its job.
+        const wasPilotReminder = l.plan === PILOT_PLAN_ID && l.nextFollowup === l.pilotEndDate;
         return {
           ...l,
           plan: planId,
           mandateDate,
+          nextFollowup: wasPilotReminder ? null : l.nextFollowup,
           activity: [activityEntry(me.name, txt), ...l.activity],
         };
       }),
     }));
+  },
+
+  setLeadPilot: (leadId, pilotStartDate, pilotEndDate) => {
+    const state = get();
+    const me = state.currentUser();
+    const lead = state.leads.find((l) => l.id === leadId);
+    if (!lead) return;
+    const renewing = lead.plan === PILOT_PLAN_ID;
+    set((s) => ({
+      leads: s.leads.map((l) => {
+        if (l.id !== leadId) return l;
+        const txt = renewing
+          ? `Pilot renewed — now ends ${fmtShortDate(pilotEndDate)}. Follow-up moved to the new end date.`
+          : `Pilot started ${fmtShortDate(pilotStartDate)}, ends ${fmtShortDate(pilotEndDate)} — ` +
+            "a follow-up is set for the end date to add real subscription details.";
+        return {
+          ...l,
+          plan: PILOT_PLAN_ID,
+          mandateDate: null,
+          pilotStartDate,
+          pilotEndDate,
+          nextFollowup: pilotEndDate,
+          activity: [activityEntry(me.name, txt), ...l.activity],
+        };
+      }),
+    }));
+  },
+
+  // Extends a running (or just-ended) pilot without disturbing when it
+  // started. Returns an error message, or null once it's saved.
+  renewPilot: (leadId, newEndDate) => {
+    const state = get();
+    const me = state.currentUser();
+    const lead = state.leads.find((l) => l.id === leadId);
+    if (!lead || lead.plan !== PILOT_PLAN_ID) return "This account isn't on a pilot.";
+    if (!newEndDate || newEndDate <= (lead.pilotStartDate || "")) {
+      return "The new end date must be after the pilot's start date.";
+    }
+    set((s) => ({
+      leads: s.leads.map((l) => {
+        if (l.id !== leadId) return l;
+        const txt = `Pilot renewed — now ends ${fmtShortDate(newEndDate)}. Follow-up moved to the new end date.`;
+        return {
+          ...l,
+          pilotEndDate: newEndDate,
+          nextFollowup: newEndDate,
+          activity: [activityEntry(me.name, txt), ...l.activity],
+        };
+      }),
+    }));
+    return null;
   },
 
   createLead: (input) => {
@@ -470,6 +527,7 @@ export const useStore = create<StoreState>((set, get) => ({
       title: input.title,
       account,
       type,
+      createdBy: state.currentUserId,
       email: input.email || "",
       phone: input.phone || "",
       city: input.city || "—",
@@ -487,6 +545,8 @@ export const useStore = create<StoreState>((set, get) => ({
       createdAt: today,
       plan: null,
       mandateDate: null,
+      pilotStartDate: null,
+      pilotEndDate: null,
       stageHistory: [{ stage: "new", date: today }],
       wonAt: null,
       activity: [activityEntry("System", noteBits.join(" "))],
@@ -534,6 +594,7 @@ export const useStore = create<StoreState>((set, get) => ({
         name: `${r.firstName} ${r.lastName}`.trim(),
         title: r.title,
         account,
+        createdBy: state.currentUserId,
         type,
         email: r.email || "",
         phone: r.phone || "",
@@ -552,6 +613,8 @@ export const useStore = create<StoreState>((set, get) => ({
         createdAt: today,
         plan: null,
         mandateDate: null,
+        pilotStartDate: null,
+        pilotEndDate: null,
         stageHistory: [{ stage: "new", date: today }],
         wonAt: null,
         activity: [activityEntry("System", noteBits.join(" "))],

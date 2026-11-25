@@ -4,12 +4,21 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { EMPTY_FILTERS, filterLeads, parseFilters, type FilterState } from "@/lib/filters";
+import { STAGES, assignableList, directoryList } from "@/lib/constants";
+import {
+  applyFieldCriteria,
+  buildFilterFields,
+  fieldsByKeyMap,
+  parseFieldCriteria,
+  type FieldCriterion,
+} from "@/lib/advancedFilters";
 import { pageSlice } from "@/lib/paging";
 import { usePaging } from "@/lib/usePaging";
 import { useSessionState } from "@/lib/useSessionState";
 import Pager from "@/components/Pager";
 import { accountHref, buildAccounts } from "@/lib/accounts";
 import FilterBar from "@/components/FilterBar";
+import AdvancedFilterPanel from "@/components/AdvancedFilterPanel";
 import AccountsTable from "@/components/AccountsTable";
 import AccountsBulkBar from "@/components/AccountsBulkBar";
 
@@ -42,6 +51,20 @@ function AccountsList() {
     EMPTY_FILTERS,
     parseFilters
   );
+  const [showFieldFilter, setShowFieldFilter] = useState(false);
+  const [fieldFilterResetKey, setFieldFilterResetKey] = useState(0);
+  const fields = useMemo(
+    () => buildFilterFields(STAGES, assignableList(), directoryList()).filter((f) => !f.managerOnly || isManager),
+    [isManager]
+  );
+  const fieldsByKey = useMemo(() => fieldsByKeyMap(fields), [fields]);
+  // Shared with the account page below it: open one of these accounts while
+  // a filter is on, and it carries over there too, with the same key.
+  const [fieldCriteria, setFieldCriteria] = useSessionState<FieldCriterion[]>(
+    `modenx:${currentUserId}:accounts:fieldfilters`,
+    [],
+    parseFieldCriteria
+  );
 
   // Older links (/accounts?account=…) opened a side panel; each account now
   // has its own page.
@@ -54,8 +77,8 @@ function AccountsList() {
     [visibleLeads]
   );
   const filtered = useMemo(
-    () => (accountParam ? [] : filterLeads(visibleLeads, filters)),
-    [accountParam, visibleLeads, filters]
+    () => (accountParam ? [] : applyFieldCriteria(filterLeads(visibleLeads, filters), fieldCriteria, fieldsByKey)),
+    [accountParam, visibleLeads, filters, fieldCriteria, fieldsByKey]
   );
   const accounts = useMemo(() => buildAccounts(filtered), [filtered]);
   const contactTotal = accounts.reduce((n, a) => n + a.contacts.length, 0);
@@ -116,38 +139,62 @@ function AccountsList() {
         </div>
       </div>
 
-      <FilterBar value={filters} onChange={setFilters} cities={cities} />
-
-      <div ref={listTop} className="scroll-mt-24">
-        <AccountsTable
-          accounts={shown}
-          onOpen={(name) => router.push(accountHref(name))}
-          selection={isManager ? selection : undefined}
-        />
-      </div>
-      <Pager
-        page={paging.page}
-        size={paging.size}
-        total={accounts.length}
-        noun={["account", "accounts"]}
-        onPage={goToPage}
-        onSize={paging.setSize}
+      <FilterBar
+        value={filters}
+        onChange={setFilters}
+        cities={cities}
+        quickFilters={false}
+        fieldFilterCount={fieldCriteria.length}
+        onOpenFieldFilter={() => setShowFieldFilter((v) => !v)}
+        onResetFieldFilter={() => {
+          setFieldCriteria([]);
+          setFieldFilterResetKey((k) => k + 1);
+        }}
       />
-      {isManager && (
-        <>
-          {/* room so the floating bar never covers the page buttons */}
-          {selectedAccounts.length > 0 && <div className="h-24" />}
-          <AccountsBulkBar
-            selected={selectedAccounts}
-            onClear={() => setTicked(new Set())}
-            matchingCount={accounts.length}
-            canSelectAllMatching={
-              selectedAccounts.length < accounts.length && shown.every((a) => ticked.has(a.name))
-            }
-            onSelectAllMatching={() => setTicked(new Set(accounts.map((a) => a.name)))}
+
+      <div className="flex items-start gap-4 mt-1">
+        <AdvancedFilterPanel
+          key={fieldFilterResetKey}
+          open={showFieldFilter}
+          fields={fields}
+          criteria={fieldCriteria}
+          onApply={setFieldCriteria}
+          onClose={() => setShowFieldFilter(false)}
+        />
+
+        <div className="min-w-0 flex-1">
+          <div ref={listTop} className="scroll-mt-24">
+            <AccountsTable
+              accounts={shown}
+              onOpen={(name) => router.push(accountHref(name))}
+              selection={isManager ? selection : undefined}
+            />
+          </div>
+          <Pager
+            page={paging.page}
+            size={paging.size}
+            total={accounts.length}
+            noun={["account", "accounts"]}
+            onPage={goToPage}
+            onSize={paging.setSize}
           />
-        </>
-      )}
+          {isManager && (
+            <>
+              {/* room so the floating bar never covers the page buttons */}
+              {selectedAccounts.length > 0 && <div className="h-24" />}
+              <AccountsBulkBar
+                selected={selectedAccounts}
+                onClear={() => setTicked(new Set())}
+                matchingCount={accounts.length}
+                canSelectAllMatching={
+                  selectedAccounts.length < accounts.length && shown.every((a) => ticked.has(a.name))
+                }
+                onSelectAllMatching={() => setTicked(new Set(accounts.map((a) => a.name)))}
+              />
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

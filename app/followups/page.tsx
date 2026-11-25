@@ -4,12 +4,14 @@ import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { EDITABLE_FIELDS, ACCOUNT_EDITABLE_FIELDS, repById } from "@/lib/constants";
 import { fmtShortDate, fmtFollowup, followupBucket } from "@/lib/dates";
-import { duePayments, fmtInr, leadMrr } from "@/lib/revenue";
+import { duePayments, fmtInr, leadMrr, isPilot } from "@/lib/revenue";
 import { effectivePriority } from "@/lib/scoring";
 import { applyFuDateFilter, EMPTY_FU_DATE_FILTER, type FuDateFilter } from "@/lib/filters";
 import LeadDrawer from "@/components/LeadDrawer";
 import ContactedModal from "@/components/ContactedModal";
+import RenewPilotModal from "@/components/RenewPilotModal";
 import PaymentsList from "@/components/PaymentsList";
+import PillTabs from "@/components/PillTabs";
 import type { Lead } from "@/lib/types";
 import type { ChangeRequest } from "@/lib/store";
 
@@ -191,6 +193,7 @@ export default function FollowupsPage() {
   const [dateFilter, setDateFilter] = useState<FuDateFilter>(EMPTY_FU_DATE_FILTER);
   const [openLeadId, setOpenLeadId] = useState<string | null>(null);
   const [contactedLead, setContactedLead] = useState<Lead | null>(null);
+  const [renewPilotLead, setRenewPilotLead] = useState<Lead | null>(null);
 
   const withFollowup = useMemo(() => {
     const base = visibleLeads
@@ -214,20 +217,11 @@ export default function FollowupsPage() {
 
       <section>
         <div className="flex items-center gap-1 flex-wrap mb-3">
-          {FU_PRESETS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              className="px-2.5 py-1 rounded-md text-[12px]"
-              style={{
-                background: dateFilter.preset === p.id ? "var(--accent-soft)" : "transparent",
-                color: dateFilter.preset === p.id ? "var(--accent-ink)" : "var(--ink-2)",
-              }}
-              onClick={() => setDateFilter({ ...dateFilter, preset: p.id })}
-            >
-              {p.label}
-            </button>
-          ))}
+          <PillTabs
+            items={FU_PRESETS.map((p) => ({ key: p.id, label: p.label }))}
+            active={dateFilter.preset}
+            onChange={(key) => setDateFilter({ ...dateFilter, preset: key as FuDateFilter["preset"] })}
+          />
           {dateFilter.preset === "custom" && (
             <>
               <input
@@ -281,6 +275,14 @@ export default function FollowupsPage() {
                         </span>
                         <div className="flex-1 flex items-center gap-2 flex-wrap text-[12.5px]">
                           <span style={{ color: "var(--ink)" }}>{l.name}</span>
+                          {isPilot(l) && l.nextFollowup === l.pilotEndDate && (
+                            <span
+                              className="px-1.5 py-0.5 rounded text-[10px] font-mono"
+                              style={{ background: "var(--warn-soft)", color: "var(--warn)" }}
+                            >
+                              Pilot ends — add subscription
+                            </span>
+                          )}
                           <span
                             className="px-1.5 py-0.5 rounded text-[10px] font-mono"
                             style={{ background: "var(--accent-soft)", color: "var(--accent-ink)" }}
@@ -309,25 +311,51 @@ export default function FollowupsPage() {
                           )}
                         </div>
                         <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            className="px-2.5 py-1 rounded text-[12px] border"
-                            style={{ borderColor: "var(--grid)", color: "var(--ink)" }}
-                            onClick={() => {
-                              snoozeFollowup(l.id, 7);
-                              showToast(`Snoozed ${l.name} by a week`);
-                            }}
-                          >
-                            Snooze 1wk
-                          </button>
-                          <button
-                            type="button"
-                            className="px-2.5 py-1 rounded text-[12px] text-white"
-                            style={{ background: "var(--accent)" }}
-                            onClick={() => setContactedLead(l)}
-                          >
-                            Contacted
-                          </button>
+                          {isPilot(l) && l.nextFollowup === l.pilotEndDate ? (
+                            <>
+                              <button
+                                type="button"
+                                className="px-2.5 py-1 rounded text-[12px] border"
+                                style={{ borderColor: "var(--grid)", color: "var(--ink)" }}
+                                onClick={() => {
+                                  snoozeFollowup(l.id, 7);
+                                  showToast(`Snoozed ${l.name} by a week`);
+                                }}
+                              >
+                                Snooze 1wk
+                              </button>
+                              <button
+                                type="button"
+                                className="px-2.5 py-1 rounded text-[12px] text-white"
+                                style={{ background: "var(--accent)" }}
+                                onClick={() => setRenewPilotLead(l)}
+                              >
+                                Renew pilot
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                className="px-2.5 py-1 rounded text-[12px] border"
+                                style={{ borderColor: "var(--grid)", color: "var(--ink)" }}
+                                onClick={() => {
+                                  snoozeFollowup(l.id, 7);
+                                  showToast(`Snoozed ${l.name} by a week`);
+                                }}
+                              >
+                                Snooze 1wk
+                              </button>
+                              <button
+                                type="button"
+                                className="px-2.5 py-1 rounded text-[12px] text-white"
+                                style={{ background: "var(--accent)" }}
+                                onClick={() => setContactedLead(l)}
+                              >
+                                Contacted
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     );
@@ -341,6 +369,7 @@ export default function FollowupsPage() {
 
       {openLeadId && <LeadDrawer leadId={openLeadId} onClose={() => setOpenLeadId(null)} />}
       {contactedLead && <ContactedModal lead={contactedLead} onClose={() => setContactedLead(null)} />}
+      {renewPilotLead && <RenewPilotModal lead={renewPilotLead} onClose={() => setRenewPilotLead(null)} />}
     </div>
   );
 }

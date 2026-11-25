@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { STAGES, assignableList, sellersList } from "@/lib/constants";
 import { RANGE_PRESETS, rangeForPreset, workingRangeForRep } from "@/lib/calendar";
+import PillTabs from "@/components/PillTabs";
 import { computeRepStats, computeFunnel, computeStageAging } from "@/lib/reports";
 import Link from "next/link";
 import { accountHref, buildAccounts } from "@/lib/accounts";
@@ -106,20 +107,11 @@ export default function ReportsPage() {
       </p>
 
       <div className="flex items-center gap-1 flex-wrap mb-1">
-        {RANGE_PRESETS.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            className="px-2.5 py-1 rounded-md text-[12px]"
-            style={{
-              background: rangePreset === p.id ? "var(--accent-soft)" : "transparent",
-              color: rangePreset === p.id ? "var(--accent-ink)" : "var(--ink-2)",
-            }}
-            onClick={() => setRangePreset(p.id)}
-          >
-            {p.label}
-          </button>
-        ))}
+        <PillTabs
+          items={RANGE_PRESETS.map((p) => ({ key: p.id, label: p.label }))}
+          active={rangePreset}
+          onChange={setRangePreset}
+        />
         {rangePreset === "custom" && (
           <>
             <input

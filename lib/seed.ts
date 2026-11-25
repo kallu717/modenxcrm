@@ -158,6 +158,7 @@ export function generateSeed(): SeedResult {
       name,
       title: fn,
       account,
+      createdBy: assignee,
       type,
       stage: finalStage,
       assignee,
@@ -176,6 +177,8 @@ export function generateSeed(): SeedResult {
       createdAt,
       plan,
       mandateDate,
+      pilotStartDate: null,
+      pilotEndDate: null,
       stageHistory,
       wonAt,
       activity: [

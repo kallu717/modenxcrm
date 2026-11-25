@@ -104,6 +104,12 @@ export function repsList(): Rep[] {
   return directory.filter((r) => r.role === "Rep");
 }
 
+// Everyone who can sign in, any role — for "who added this" (anyone with
+// access can add or import a contact, not just reps and managers).
+export function directoryList(): Rep[] {
+  return directory;
+}
+
 // Who can be given accounts: reps, and managers who also sell. Admins only
 // administer. The server enforces the same rule.
 export function assignableList(): Rep[] {

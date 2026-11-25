@@ -2,11 +2,17 @@
 
 // "Filter leads by field" — after Zoho CRM's Leads filter panel. Search for
 // any field, tick it, and a small is/contains/before… row appears right
-// there so you can say what you want; tick as many fields as you like and
-// Apply keeps every lead that matches all of them.
+// there so you can say what you want; the list updates as you go, with
+// every ticked field matched together.
+//
+// Docked beside the list (the grid makes room for it), not an overlay — so
+// it never swallows a click on the page behind it, and it stays mounted
+// while closed, so what's ticked is still there next time you open it. The
+// toolbar's own Reset button clears it by changing this component's `key`,
+// which remounts it with a clean slate (the Reset button covers "clear
+// everything", so this panel doesn't need its own copy of that).
 
 import { useMemo, useState } from "react";
-import { useEscape } from "@/components/Modal";
 import {
   NO_VALUE_OPERATORS,
   OPERATORS_BY_TYPE,
@@ -89,17 +95,18 @@ function ValueInput({
 }
 
 export default function AdvancedFilterPanel({
+  open,
   fields,
   criteria,
   onApply,
   onClose,
 }: {
+  open: boolean;
   fields: FilterFieldDef[];
   criteria: FieldCriterion[];
   onApply: (next: FieldCriterion[]) => void;
   onClose: () => void;
 }) {
-  useEscape(onClose);
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState<FieldCriterion[]>(criteria);
 
@@ -120,43 +127,52 @@ export default function AdvancedFilterPanel({
     return order.map((g) => ({ group: g, fields: by.get(g)! }));
   }, [fields, query]);
 
+  // Every change here takes effect at once — the grid is never more than
+  // one tick or keystroke away from what's checked.
+  const commit = (next: FieldCriterion[]) => {
+    setDraft(next);
+    onApply(next);
+  };
+
   const toggle = (field: FilterFieldDef) => {
-    setDraft((d) => {
-      if (byKey.has(field.key)) return d.filter((c) => c.field !== field.key);
-      return [...d, emptyCriterion(field.key, field.type)];
-    });
+    commit(
+      byKey.has(field.key) ? draft.filter((c) => c.field !== field.key) : [...draft, emptyCriterion(field.key, field.type)]
+    );
   };
 
   const updateCriterion = (next: FieldCriterion) => {
-    setDraft((d) => d.map((c) => (c.field === next.field ? next : c)));
+    commit(draft.map((c) => (c.field === next.field ? next : c)));
   };
 
   const changeOperator = (field: FilterFieldDef, operator: string) => {
-    setDraft((d) =>
-      d.map((c) => (c.field === field.key ? { field: field.key, operator, value: "", value2: undefined } : c))
+    commit(
+      draft.map((c) => (c.field === field.key ? { field: field.key, operator, value: "", value2: undefined } : c))
     );
   };
 
   return (
-    <div
-      className="drawer-backdrop-left fixed inset-0 z-[90] flex justify-start"
-      style={{ background: "rgba(0,0,0,.4)" }}
-      onClick={onClose}
-    >
+    <div className={`shrink-0 transition-[width] duration-200 ${open ? "w-72" : "w-0"} overflow-hidden`}>
       <aside
-        role="dialog"
-        aria-modal="true"
         aria-label="Filter leads by field"
-        className="w-full max-w-sm h-full flex flex-col border-r"
-        style={{ background: "var(--surface)", borderColor: "var(--grid)", boxShadow: "var(--shadow-lg)" }}
-        onClick={(e) => e.stopPropagation()}
+        aria-hidden={!open}
+        className="w-72 flex flex-col rounded-lg border"
+        style={{ background: "var(--surface)", borderColor: "var(--grid)", boxShadow: "var(--shadow)" }}
       >
         <div className="p-4 pb-3 border-b" style={{ borderColor: "var(--grid)" }}>
           <div className="flex items-center justify-between">
             <h3 className="text-[15px] font-semibold" style={{ color: "var(--ink)" }}>
               Filter leads by
             </h3>
-            <button type="button" aria-label="Close" data-tip="Close" onClick={onClose} className="text-[13px]" style={{ color: "var(--muted)" }}>
+            <button
+              type="button"
+              aria-label="Close"
+              data-tip="Close"
+              data-tip-side="bottom"
+              tabIndex={open ? 0 : -1}
+              onClick={onClose}
+              className="text-[13px]"
+              style={{ color: "var(--muted)" }}
+            >
               ✕
             </button>
           </div>
@@ -166,12 +182,13 @@ export default function AdvancedFilterPanel({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search fields…"
             aria-label="Search fields"
+            tabIndex={open ? 0 : -1}
             className="w-full mt-2.5 px-2.5 py-1.5 rounded-md text-[13px] border"
             style={inputStyle}
           />
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-2">
+        <div className="px-4 py-2">
           {groups.map(({ group, fields: groupFields }) => (
             <div key={group} className="mb-3">
               <p className="font-mono uppercase tracking-wide mb-1 mt-2" style={{ fontSize: "10.5px", color: "var(--muted)" }}>
@@ -183,13 +200,14 @@ export default function AdvancedFilterPanel({
                 return (
                   <div key={f.key} className="py-1">
                     <label className="flex items-center gap-2 cursor-pointer text-[13px]" style={{ color: "var(--ink)" }}>
-                      <input type="checkbox" checked={checked} onChange={() => toggle(f)} />
+                      <input type="checkbox" tabIndex={open ? 0 : -1} checked={checked} onChange={() => toggle(f)} />
                       {f.label}
                     </label>
                     {checked && c && (
                       <div className="mt-1.5 ml-5 space-y-1.5">
                         <select
                           value={c.operator}
+                          tabIndex={open ? 0 : -1}
                           onChange={(e) => changeOperator(f, e.target.value)}
                           className="w-full px-2 py-1 rounded-md text-[12.5px] border"
                           style={inputStyle}
@@ -215,29 +233,14 @@ export default function AdvancedFilterPanel({
           )}
         </div>
 
-        <div className="p-4 pt-3 border-t flex items-center gap-2" style={{ borderColor: "var(--grid)" }}>
-          <button
-            type="button"
-            className="px-3 py-1.5 rounded-md text-[13px] text-white"
-            style={{ background: "var(--accent)" }}
-            onClick={() => onApply(draft)}
-          >
-            Apply Filter
-          </button>
-          <button
-            type="button"
-            className="px-3 py-1.5 rounded-md text-[13px] border"
-            style={inputStyle}
-            onClick={() => setDraft([])}
-          >
-            Clear
-          </button>
-          {draft.length > 0 && (
-            <span className="text-[11.5px] ml-auto" style={{ color: "var(--muted)" }}>
-              {draft.length} field{draft.length === 1 ? "" : "s"}
+        {draft.length > 0 && (
+          <div className="px-4 py-2.5 border-t" style={{ borderColor: "var(--grid)" }}>
+            <span className="text-[11.5px]" style={{ color: "var(--muted)" }}>
+              {draft.length} field{draft.length === 1 ? "" : "s"} active — Reset on the toolbar clears
+              {draft.length === 1 ? " it" : " them"}
             </span>
-          )}
-        </div>
+          </div>
+        )}
       </aside>
     </div>
   );

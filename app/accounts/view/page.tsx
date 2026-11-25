@@ -4,8 +4,16 @@ import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useStore } from "@/lib/store";
-import { STAGES } from "@/lib/constants";
+import { STAGES, assignableList, directoryList } from "@/lib/constants";
 import { buildAccounts } from "@/lib/accounts";
+import {
+  applyFieldCriteria,
+  buildFilterFields,
+  fieldsByKeyMap,
+  parseFieldCriteria,
+  type FieldCriterion,
+} from "@/lib/advancedFilters";
+import { useSessionState } from "@/lib/useSessionState";
 import AccountOwnership from "@/components/AccountOwnership";
 import AccountContacts from "@/components/AccountContacts";
 import AccountDetails from "@/components/AccountDetails";
@@ -45,10 +53,28 @@ function AccountView() {
   const accountName = useSearchParams().get("name") ?? "";
   const leads = useStore((s) => s.leads);
   const isManager = useStore((s) => s.isManager());
+  const currentUserId = useStore((s) => s.currentUserId);
   const account = useMemo(() => buildAccounts(leads).find((a) => a.name === accountName), [leads, accountName]);
 
   const [cityKey, setCityKey] = useState<string | null>(null);
   const [openLeadId, setOpenLeadId] = useState<string | null>(null);
+
+  // The same filter from the Accounts list, if one was on — carried over by
+  // sharing its session key, so arriving here still shows what matched.
+  const [carriedCriteria] = useSessionState<FieldCriterion[]>(
+    `modenx:${currentUserId}:accounts:fieldfilters`,
+    [],
+    parseFieldCriteria
+  );
+  const filterFields = useMemo(
+    () => buildFilterFields(STAGES, assignableList(), directoryList()).filter((f) => !f.managerOnly || isManager),
+    [isManager]
+  );
+  const filterFieldsByKey = useMemo(() => fieldsByKeyMap(filterFields), [filterFields]);
+  const matchingContacts = useMemo(
+    () => (account ? applyFieldCriteria(account.contacts, carriedCriteria, filterFieldsByKey) : []),
+    [account, carriedCriteria, filterFieldsByKey]
+  );
 
   const back = (
     <Link href="/accounts" className="text-[12.5px]" style={{ color: "var(--muted)" }}>
@@ -111,10 +137,27 @@ function AccountView() {
         </div>
       </header>
 
+      {carriedCriteria.length > 0 && (
+        <div
+          className="rounded-lg px-4 py-3 text-[14px] font-semibold"
+          style={{ background: "var(--accent-soft)", color: "var(--accent-ink)" }}
+        >
+          Showing results pulled by your filter — {matchingContacts.length} of {account.contacts.length} contact
+          {account.contacts.length === 1 ? "" : "s"} match
+        </div>
+      )}
+
       <AccountOwnership key={account.name} account={account} onShowContacts={showContacts} />
 
       <div className="grid gap-4 items-start lg:grid-cols-[minmax(0,1fr)_320px]">
-        <AccountContacts account={account} cityKey={cityKey} onCityChange={setCityKey} onOpenLead={setOpenLeadId} />
+        <AccountContacts
+          key={account.name}
+          account={account}
+          cityKey={cityKey}
+          onCityChange={setCityKey}
+          onOpenLead={setOpenLeadId}
+          initialCriteria={carriedCriteria}
+        />
         <AccountDetails key={account.name} account={account} />
       </div>
 
