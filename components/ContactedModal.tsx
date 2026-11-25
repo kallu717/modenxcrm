@@ -19,9 +19,9 @@ export default function ContactedModal({ lead, onClose }: { lead: Lead; onClose:
 
   const showToast = useStore((s) => s.showToast);
 
-  const finish = (iso: string | null) => {
+  const finish = (iso: string) => {
     markContacted(lead.id, iso);
-    showToast(iso ? "Next follow-up: " + fmtFollowup(iso) : `${lead.name} marked contacted — no further follow-up`);
+    showToast("Next follow-up: " + fmtFollowup(iso));
     onClose();
   };
 
@@ -31,7 +31,8 @@ export default function ContactedModal({ lead, onClose }: { lead: Lead; onClose:
           Log {lead.name} as contacted
         </h3>
         <p className="text-[12.5px] mt-1" style={{ color: "var(--muted)" }}>
-          Before this clears, set the next follow-up — or confirm there isn&apos;t one.
+          Before this clears, set the next follow-up. If there&apos;s nothing more to do here, move the stage to
+          Unqualified or Lost instead of leaving it with no follow-up.
         </p>
 
         <div className="grid grid-cols-2 gap-2 mt-4">
@@ -62,14 +63,7 @@ export default function ContactedModal({ lead, onClose }: { lead: Lead; onClose:
           />
         </div>
 
-        <div
-          className="text-center my-3"
-          style={{ color: "var(--muted)", fontSize: "11px" }}
-        >
-          or
-        </div>
-
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-2 mt-3">
           <button
             type="button"
             className="px-3 py-1.5 rounded-md text-[13px] border"
@@ -77,14 +71,6 @@ export default function ContactedModal({ lead, onClose }: { lead: Lead; onClose:
             onClick={onClose}
           >
             Cancel
-          </button>
-          <button
-            type="button"
-            className="px-3 py-1.5 rounded-md text-[13px] border"
-            style={{ borderColor: "var(--grid)", color: "var(--ink)" }}
-            onClick={() => finish(null)}
-          >
-            No further follow-up needed
           </button>
         </div>
     </Modal>

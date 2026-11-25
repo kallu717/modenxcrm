@@ -190,7 +190,7 @@ interface StoreState {
   deleteLead: (leadId: string) => void;
   deleteAccount: (accountName: string) => void;
   snoozeFollowup: (leadId: string, days: number) => void;
-  markContacted: (leadId: string, nextFollowup: string | null) => void;
+  markContacted: (leadId: string, nextFollowup: string) => void;
 
   // ---- payments ----
   paymentReminders: Record<string, string>;
@@ -636,9 +636,7 @@ export const useStore = create<StoreState>((set, get) => ({
     set((s) => ({
       leads: s.leads.map((l) => {
         if (l.id !== leadId) return l;
-        const txt = nextFollowup
-          ? `Marked contacted. Next follow-up set to ${fmtFollowup(nextFollowup)}.`
-          : "Marked contacted. No further follow-up needed.";
+        const txt = `Marked contacted. Next follow-up set to ${fmtFollowup(nextFollowup)}.`;
         return {
           ...l,
           nextFollowup,

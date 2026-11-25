@@ -311,11 +311,9 @@ describe("N. Follow-ups, notes and meetings", () => {
     expect(leadById(l.id).nextFollowup).toBe("2026-09-30");
   });
 
-  it("N4 marked contacted, with and without a next date", () => {
+  it("N4 marked contacted always sets the next follow-up date — there's no 'none needed' option", () => {
     store().markContacted(l.id, "2026-09-28");
     expect(leadById(l.id).nextFollowup).toBe("2026-09-28");
-    store().markContacted(l.id, null);
-    expect(leadById(l.id).nextFollowup).toBeNull();
   });
 
   it("N5 Priya's WhatsApp note shows up in her report stats", () => {
