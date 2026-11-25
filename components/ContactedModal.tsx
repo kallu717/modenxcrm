@@ -1,5 +1,6 @@
 "use client";
 
+import Modal from "@/components/Modal";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { isoToday, isoPlusDays, nextWeekday, fmtFollowup } from "@/lib/dates";
@@ -25,16 +26,7 @@ export default function ContactedModal({ lead, onClose }: { lead: Lead; onClose:
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,.4)" }}
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-sm rounded-xl p-5"
-        style={{ background: "var(--surface)", boxShadow: "var(--shadow-lg)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} label={`Log ${lead.name} as contacted`} width="max-w-sm">
         <h3 className="text-[15px] font-semibold" style={{ color: "var(--ink)" }}>
           Log {lead.name} as contacted
         </h3>
@@ -95,7 +87,6 @@ export default function ContactedModal({ lead, onClose }: { lead: Lead; onClose:
             No further follow-up needed
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

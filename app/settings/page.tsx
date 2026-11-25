@@ -75,6 +75,49 @@ function PersonRow({ u, busy, onChange }: { u: AdminUser; busy: boolean; onChang
   );
 }
 
+// An on/off switch for one company-wide setting.
+function SettingSwitch({
+  label,
+  on,
+  busy,
+  onChange,
+  children,
+}: {
+  label: string;
+  on: boolean;
+  busy: boolean;
+  onChange: (on: boolean) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-lg border px-4 py-3" style={{ borderColor: "var(--grid)", background: "var(--surface)" }}>
+      <div className="min-w-0">
+        <div className="text-[13px] font-medium" style={{ color: "var(--ink)" }}>
+          {label}
+        </div>
+        <div className="text-[12px] mt-0.5" style={{ color: "var(--muted)" }}>
+          {children}
+        </div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label={label}
+        disabled={busy}
+        onClick={() => onChange(!on)}
+        className="relative shrink-0 w-10 h-[22px] rounded-full transition-colors disabled:opacity-60 mt-0.5"
+        style={{ background: on ? "var(--accent)" : "var(--grid)" }}
+      >
+        <span
+          className="absolute top-[3px] w-4 h-4 rounded-full bg-white transition-all"
+          style={{ left: on ? "21px" : "3px", boxShadow: "0 1px 2px rgba(0,0,0,.25)" }}
+        />
+      </button>
+    </div>
+  );
+}
+
 function PeopleTable({ people, busyId, onChange }: { people: AdminUser[]; busyId: string | null; onChange: (u: AdminUser, role: Role) => void }) {
   return (
     <div className="overflow-x-auto rounded-lg border" style={{ borderColor: "var(--grid)", background: "var(--surface)" }}>
@@ -103,6 +146,26 @@ export default function SettingsPage() {
   const [people, setPeople] = useState<AdminUser[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const autoAssign = useStore((s) => s.autoAssignUploads);
+  const [savingSetting, setSavingSetting] = useState(false);
+
+  async function setAutoAssign(on: boolean) {
+    setSavingSetting(true);
+    try {
+      const saved = await api.setSettings({ autoAssignUploads: on });
+      useStore.setState({ autoAssignUploads: saved.autoAssignUploads });
+      showToast(
+        saved.autoAssignUploads
+          ? "Uploaded contacts now go to the person who uploads them"
+          : "Uploaded contacts now arrive unassigned"
+      );
+      refresh();
+    } catch (e) {
+      showToast(describeError(e), "error");
+    } finally {
+      setSavingSetting(false);
+    }
+  }
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -115,10 +178,10 @@ export default function SettingsPage() {
     try {
       const updated = await api.setRole(u.id, role);
       setPeople((list) => list?.map((p) => (p.id === u.id ? updated : p)) ?? null);
-      showToast(role === "Pending" ? `${u.name} no longer has access` : `${u.name} is now ${ROLE_LABELS[role]}`);
+      showToast(role === "Pending" ? `${u.name} no longer has access` : `${u.name} is now ${ROLE_LABELS[role]}`, "success");
       refresh(); // so assignee lists etc. pick up the change
     } catch (e) {
-      showToast(describeError(e));
+      showToast(describeError(e), "error");
     } finally {
       setBusyId(null);
     }
@@ -158,6 +221,31 @@ export default function SettingsPage() {
         ))}
       </div>
 
+      <section className="mb-6">
+        <h2 className="text-[14px] font-semibold mb-2" style={{ color: "var(--ink)" }}>
+          Assigning new contacts
+        </h2>
+        <SettingSwitch
+          label="Assign uploads to the person uploading them"
+          on={autoAssign}
+          busy={savingSetting}
+          onChange={setAutoAssign}
+        >
+          {autoAssign ? (
+            <>
+              <b>On.</b> Contacts a rep or manager imports or adds with New lead are assigned to them.
+            </>
+          ) : (
+            <>
+              <b>Off.</b> Imported and new contacts arrive unassigned, for a manager to hand out. A rep won&apos;t
+              see what they upload until it&apos;s assigned to them.
+            </>
+          )}{" "}
+          Either way, a contact in a city someone already owns at that account goes to that owner, and the
+          Lead Desk feed always arrives unassigned.
+        </SettingSwitch>
+      </section>
+
       {loadError && (
         <p className="text-[13px]" style={{ color: "var(--crit)" }}>
           Couldn&apos;t load the list of people. Refresh the page to try again.
@@ -181,7 +269,7 @@ export default function SettingsPage() {
       {people && (
         <section>
           <h2 className="text-[14px] font-semibold mb-2" style={{ color: "var(--ink)" }}>
-            Everyone else ({others.length})
+            People with access ({others.length})
           </h2>
           <PeopleTable people={others} busyId={busyId} onChange={changeRole} />
         </section>

@@ -64,3 +64,15 @@ ROW = {"name": "Ananya Sharma", "title": "Marketing Head", "account": "Studio We
 
 def import_rows(client, rows, **params):
     return client.post("/api/leads/import", params=params, json={"filename": "t.xlsx", "rows": rows})
+
+
+def set_auto_assign(on: bool) -> None:
+    """The admin's "assign uploads to the uploader" switch (on by default)."""
+    r = signed_in("asha@dev.local").put("/api/admin/settings", json={"autoAssignUploads": on})
+    assert r.status_code == 200
+
+
+@pytest.fixture
+def uploads_unassigned():
+    """Uploads arrive unassigned, so a test can hand out accounts by hand."""
+    set_auto_assign(False)

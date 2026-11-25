@@ -42,6 +42,12 @@ export interface Bootstrap {
   users: ServerUser[];
   leads: Versioned[];
   records: Record<RecordKind, { id: string; data: unknown }[]>;
+  settings?: AppSettings;
+}
+
+// Company-wide switches an admin sets on the Settings page.
+export interface AppSettings {
+  autoAssignUploads: boolean;
 }
 
 export interface RecordItem {
@@ -100,6 +106,7 @@ export const api = {
   bootstrap: () => call<Bootstrap>("GET", "/api/bootstrap"),
   adminUsers: () => call<AdminUser[]>("GET", "/api/admin/users"),
   setRole: (userId: string, role: Role) => call<AdminUser>("PUT", `/api/admin/users/${userId}`, { role }),
+  setSettings: (changes: Partial<AppSettings>) => call<AppSettings>("PUT", "/api/admin/settings", changes),
   sync: (body: SyncBody) => call<{ leads: Versioned[]; records: RecordItem[] }>("POST", "/api/sync", body),
   createLead: (row: ImportRow) => call<Versioned>("POST", "/api/leads", row),
   importLeads: (rows: ImportRow[], filename: string, dryRun: boolean) =>

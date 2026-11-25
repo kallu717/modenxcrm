@@ -41,7 +41,7 @@ def test_rep_import_assigns_to_the_rep_with_a_server_score(priya):
     assert not any("city" in r for r in lead["scoreReasons"])
 
 
-def test_manager_import_stays_unassigned(meera):
+def test_manager_import_stays_unassigned_when_uploads_are_not_auto_assigned(meera, uploads_unassigned):
     lead = import_rows(meera, [ROW]).json()["created"][0]["lead"]
     assert lead["assignee"] is None and lead["ownerSince"] is None
 
@@ -79,7 +79,7 @@ def test_validation_messages(priya):
     r = import_rows(priya, rows).json()
     assert r["ready"] == 0 and r["rejected"] == 3
     assert any("must be Brand, Mall or Store" in i for i in r["issues"])
-    assert any("missing Contact name" in i for i in r["issues"])
+    assert any("missing First name, Last name" in i for i in r["issues"])
 
 
 def test_angle_brackets_pass_through_by_default(priya):

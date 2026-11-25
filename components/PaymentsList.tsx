@@ -1,5 +1,6 @@
 "use client";
 
+import { celebrate, originOf } from "@/lib/confetti";
 import { useStore } from "@/lib/store";
 import { repById } from "@/lib/constants";
 import { daysUntil, fmtDueIn } from "@/lib/dates";
@@ -89,6 +90,7 @@ export default function PaymentsList({
                 style={{ borderColor: "var(--good)", color: "var(--good)" }}
                 onClick={(e) => {
                   e.stopPropagation();
+                  celebrate(originOf(e.currentTarget));
                   markPaid(lead.id, date);
                   showToast(`${lead.account}: ${fmtInr(leadMrr(lead))} marked paid`);
                 }}

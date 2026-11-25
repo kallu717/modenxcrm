@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
-import { STAGES } from "@/lib/constants";
+import { STAGES, assignableList } from "@/lib/constants";
 import { locationKey, type AccountSummary } from "@/lib/accounts";
 import { effectivePriority } from "@/lib/scoring";
 import { fmtFollowup } from "@/lib/dates";
+import { applyFieldCriteria, buildFilterFields, fieldsByKeyMap, type FieldCriterion } from "@/lib/advancedFilters";
+import AdvancedFilterPanel from "./AdvancedFilterPanel";
 import { OwnerName } from "./OwnerSelect";
 
 const th = "text-left py-2 px-2 text-[11px] font-medium uppercase tracking-wide whitespace-nowrap";
@@ -30,12 +32,27 @@ export default function AccountContacts({
   const showToast = useStore((s) => s.showToast);
   const multiCity = account.locations.length > 1;
 
+  // Account name and type are left out here — every contact in this list is
+  // the same account, so filtering by either would do nothing.
+  const fields = useMemo(
+    () =>
+      buildFilterFields(STAGES, assignableList()).filter(
+        (f) => (!f.managerOnly || isManager) && f.key !== "account" && f.key !== "type"
+      ),
+    [isManager]
+  );
+  const fieldsByKey = useMemo(() => fieldsByKeyMap(fields), [fields]);
+  const [criteria, setCriteria] = useState<FieldCriterion[]>([]);
+  const [showFilter, setShowFilter] = useState(false);
+
   const contacts = useMemo(
     () =>
-      account.contacts
-        .filter((c) => cityKey === null || locationKey(c.city) === cityKey)
-        .sort((a, b) => b.score - a.score),
-    [account.contacts, cityKey]
+      applyFieldCriteria(
+        account.contacts.filter((c) => cityKey === null || locationKey(c.city) === cityKey),
+        criteria,
+        fieldsByKey
+      ).sort((a, b) => b.score - a.score),
+    [account.contacts, cityKey, criteria, fieldsByKey]
   );
 
   return (
@@ -52,25 +69,56 @@ export default function AccountContacts({
             {cityKey !== null ? ` of ${account.contacts.length}` : ""}
           </span>
         </h2>
-        {multiCity && (
-          <select
-            aria-label="Show contacts in"
-            value={cityKey ?? "__all"}
-            onChange={(e) => onCityChange(e.target.value === "__all" ? null : e.target.value)}
-            className="px-2.5 py-1.5 rounded-md border text-[12.5px]"
-            style={{ borderColor: "var(--grid)", background: "var(--surface)", color: "var(--ink)" }}
+        <div className="flex items-center gap-2">
+          {multiCity && (
+            <select
+              aria-label="Show contacts in"
+              value={cityKey ?? "__all"}
+              onChange={(e) => onCityChange(e.target.value === "__all" ? null : e.target.value)}
+              className="px-2.5 py-1.5 rounded-md border text-[12.5px]"
+              style={{ borderColor: "var(--grid)", background: "var(--surface)", color: "var(--ink)" }}
+            >
+              <option value="__all">All cities</option>
+              {[...account.locations]
+                .sort((a, b) => a.city.localeCompare(b.city))
+                .map((l) => (
+                  <option key={l.key} value={l.key}>
+                    {l.city} ({l.contacts.length})
+                  </option>
+                ))}
+            </select>
+          )}
+          <button
+            type="button"
+            className="px-2.5 py-1.5 rounded-md text-[12.5px] border flex items-center gap-1.5"
+            style={{ borderColor: "var(--grid)", color: "var(--ink)", background: "var(--surface)" }}
+            onClick={() => setShowFilter(true)}
+            data-tip="Build a filter from any field"
           >
-            <option value="__all">All cities</option>
-            {[...account.locations]
-              .sort((a, b) => a.city.localeCompare(b.city))
-              .map((l) => (
-                <option key={l.key} value={l.key}>
-                  {l.city} ({l.contacts.length})
-                </option>
-              ))}
-          </select>
-        )}
+            ⚙ Filter by field
+            {!!criteria.length && (
+              <span
+                className="rounded-full px-1.5 font-mono text-white"
+                style={{ background: "var(--accent)", fontSize: "10px", lineHeight: "16px" }}
+              >
+                {criteria.length}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
+
+      {showFilter && (
+        <AdvancedFilterPanel
+          fields={fields}
+          criteria={criteria}
+          onApply={(next) => {
+            setCriteria(next);
+            setShowFilter(false);
+          }}
+          onClose={() => setShowFilter(false)}
+        />
+      )}
       <div className="overflow-x-auto max-h-[520px] overflow-y-auto" style={{ borderTop: "1px solid var(--grid)" }}>
         <table className="w-full text-[12.5px]" style={{ borderCollapse: "collapse" }}>
           <thead className="sticky top-0 z-[1]" style={{ background: "var(--surface-2)", color: "var(--muted)" }}>

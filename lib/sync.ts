@@ -100,6 +100,7 @@ export function fromServer(b: Bootstrap) {
     targets: Object.fromEntries(r.target.map((x) => [x.id, x.data as { callsPerDay: number }])),
     payments: Object.fromEntries((r.payment ?? []).map((x) => [x.id, x.data as PaymentRecord])),
     dashboards: Object.fromEntries((r.dashboard ?? []).map((x) => [x.id, x.data as SavedDashboard])),
+    autoAssignUploads: b.settings?.autoAssignUploads ?? true,
   };
 }
 
@@ -206,7 +207,7 @@ async function save() {
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) return toSignIn();
     if (isPending(e)) return window.location.reload();
-    useStore.getState().showToast(describeError(e));
+    useStore.getState().showToast(describeError(e), "error");
     await reload();
   } finally {
     saving = false;

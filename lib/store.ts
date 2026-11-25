@@ -5,6 +5,7 @@ import { PLANS, fmtInr, leadMrr, paymentId } from "./revenue";
 import { STAGES, EDITABLE_FIELDS, ACCOUNT_EDITABLE_FIELDS, repById } from "./constants";
 import { newId } from "./ids";
 import { EMAIL_RE, PHONE_RULE, phoneDigits, phoneKey } from "./phone";
+import { toastTone, type ToastTone } from "./toast";
 import { cityLabel, locationKey } from "./accounts";
 import type { ImportRow } from "./import";
 import type { SavedDashboard, WidgetPlacement } from "./widgets";
@@ -108,10 +109,12 @@ function resolveNewContactOwner(
   accountName: string,
   city: string,
   currentUserId: string,
-  isManager: boolean
+  toUploader: boolean
 ): { existingOwner: string | null; assignee: string | null } {
+  // A city nobody owns at this account goes to the person adding the contact
+  // when the admin's "assign uploads to the uploader" setting is on.
   const existingOwner = locationOwner(leads, accountName, city);
-  const assignee = existingOwner || (isManager ? null : currentUserId);
+  const assignee = existingOwner || (toUploader ? currentUserId : null);
   return { existingOwner, assignee };
 }
 
@@ -167,8 +170,8 @@ interface StoreState {
   assignLocation: (accountName: string, cityKey: string, repId: string | null) => void;
 
   // ---- feedback ----
-  toast: { id: number; msg: string } | null;
-  showToast: (msg: string) => void;
+  toast: { id: number; msg: string; tone: ToastTone } | null;
+  showToast: (msg: string, tone?: ToastTone) => void;
 
   // ---- lead lifecycle ----
   setLeadStage: (leadId: string, stage: Lead["stage"], source?: "board" | "drawer") => void;
@@ -194,6 +197,13 @@ interface StoreState {
   logPaymentReminder: (leadId: string, billingDate: string) => void;
   payments: Record<string, PaymentRecord>;
   markPaid: (leadId: string, billingDate: string) => void;
+
+  // ---- company-wide settings an admin sets (Settings page) ----
+  // Contacts someone imports or adds go to that person (rep or manager) when
+  // nobody owns that city at the account yet. Off: they arrive unassigned.
+  autoAssignUploads: boolean;
+  // Whether a contact I add now would be mine (setting on and I can own leads).
+  uploadsGoToMe: () => boolean;
 
   // ---- dashboard layouts, one per person (by user id) ----
   dashboards: Record<string, SavedDashboard>;
@@ -239,10 +249,12 @@ export const useStore = create<StoreState>((set, get) => ({
   paymentReminders: {},
   payments: {},
   dashboards: {},
+  autoAssignUploads: true,
+  uploadsGoToMe: () => get().autoAssignUploads && ["Rep", "Manager"].includes(get().currentUser().role),
   targets: {},
 
   toast: null,
-  showToast: (msg) => set({ toast: { id: Date.now(), msg } }),
+  showToast: (msg, tone) => set({ toast: { id: Date.now(), msg, tone: toastTone(msg, tone) } }),
 
   // NOBODY only shows before the server has said who is signed in.
   currentUser: () => repById(get().currentUserId) || NOBODY,
@@ -442,7 +454,7 @@ export const useStore = create<StoreState>((set, get) => ({
       account,
       input.city,
       state.currentUserId,
-      state.isManager()
+      state.uploadsGoToMe()
     );
     const noteBits = [`Added by ${me.name}.`];
     if (existingOwner && existingOwner !== state.currentUserId) {
@@ -507,9 +519,9 @@ export const useStore = create<StoreState>((set, get) => ({
         account,
         r.city,
         state.currentUserId,
-        state.isManager()
+        state.uploadsGoToMe()
       );
-      if (assignee === state.currentUserId && !state.isManager()) toOwnAccount++;
+      if (assignee === state.currentUserId) toOwnAccount++;
       const noteBits = [`Imported from ${sourceLabel} by ${me.name}.`];
       if (existingOwner && existingOwner !== state.currentUserId) {
         noteBits.push(ownedNote(account, r.city, existingOwner));
@@ -519,7 +531,7 @@ export const useStore = create<StoreState>((set, get) => ({
 
       const lead: Lead = {
         id: "L" + String(max).padStart(3, "0"),
-        name: r.name,
+        name: `${r.firstName} ${r.lastName}`.trim(),
         title: r.title,
         account,
         type,

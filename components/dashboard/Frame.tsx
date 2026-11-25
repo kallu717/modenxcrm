@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { createContext, useContext } from "react";
 import { widgetInfo, type WidgetId } from "@/lib/widgets";
+import { NumberTicker, glowHandlers } from "@/components/fx";
 
 export interface FrameControls {
   id: WidgetId;
@@ -26,11 +27,14 @@ export default function Frame({
   count,
   subtitle,
   more,
+  alert,
   children,
 }: {
   count?: number;
   subtitle?: string;
   more?: { href: string; label: string };
+  // Something here is overdue: a light travels round the card's edge.
+  alert?: boolean;
   children: React.ReactNode;
 }) {
   const c = useContext(FrameContext);
@@ -40,7 +44,8 @@ export default function Frame({
   return (
     <section
       aria-label={info.title}
-      className="h-full flex flex-col rounded-xl relative"
+      className={`h-full flex flex-col rounded-xl relative ${c.editing ? "" : "fx-glow"} ${alert && !c.editing ? "fx-beam" : ""}`}
+      {...(c.editing ? {} : glowHandlers())}
       style={{
         background: "var(--surface)",
         boxShadow: "var(--shadow)",
@@ -58,7 +63,7 @@ export default function Frame({
           {info.title}
           {count != null && (
             <span className="ml-1.5 font-mono text-[12px] font-normal" style={{ color: "var(--muted)" }}>
-              {count.toLocaleString("en-IN")}
+              <NumberTicker value={count} />
             </span>
           )}
           {subtitle && (
@@ -77,6 +82,7 @@ export default function Frame({
                 type="button"
                 className={ctl}
                 style={{ borderColor: "var(--grid)", color: "var(--ink-2)" }}
+                data-tip="Move earlier"
                 aria-label={`Move ${info.title} earlier`}
                 disabled={c.index === 0}
                 onClick={() => c.onMove(-1)}
@@ -87,6 +93,7 @@ export default function Frame({
                 type="button"
                 className={ctl}
                 style={{ borderColor: "var(--grid)", color: "var(--ink-2)" }}
+                data-tip="Move later"
                 aria-label={`Move ${info.title} later`}
                 disabled={c.index === c.count - 1}
                 onClick={() => c.onMove(1)}
@@ -97,6 +104,7 @@ export default function Frame({
                 type="button"
                 className={ctl}
                 style={{ borderColor: "var(--crit)", color: "var(--crit)" }}
+                data-tip="Remove"
                 aria-label={`Remove ${info.title}`}
                 onClick={c.onRemove}
               >

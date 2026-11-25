@@ -4,11 +4,20 @@ import { Suspense, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { EMPTY_FILTERS, filterLeads, parseFilters, type FilterState } from "@/lib/filters";
+import { STAGES, assignableList } from "@/lib/constants";
+import {
+  applyFieldCriteria,
+  buildFilterFields,
+  fieldsByKeyMap,
+  parseFieldCriteria,
+  type FieldCriterion,
+} from "@/lib/advancedFilters";
 import { pageSlice } from "@/lib/paging";
 import { usePaging } from "@/lib/usePaging";
 import { useSessionState } from "@/lib/useSessionState";
 import Pager from "@/components/Pager";
 import FilterBar from "@/components/FilterBar";
+import AdvancedFilterPanel from "@/components/AdvancedFilterPanel";
 import StatsHeader from "@/components/StatsHeader";
 import LeadsTable from "@/components/LeadsTable";
 import NewLeadModal from "@/components/NewLeadModal";
@@ -31,6 +40,7 @@ function LeadsView() {
   const leads = useStore((s) => s.leads);
   const isManager = useStore((s) => s.isManager());
   const currentUserId = useStore((s) => s.currentUserId);
+  const uploadsGoToMe = useStore((s) => s.uploadsGoToMe());
   const visibleLeads = useMemo(
     () => (isManager ? leads : leads.filter((l) => l.assignee === currentUserId)),
     [leads, isManager, currentUserId]
@@ -54,12 +64,27 @@ function LeadsView() {
   }
   const [showNewLead, setShowNewLead] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showFieldFilter, setShowFieldFilter] = useState(false);
+
+  const fields = useMemo(
+    () => buildFilterFields(STAGES, assignableList()).filter((f) => !f.managerOnly || isManager),
+    [isManager]
+  );
+  const fieldsByKey = useMemo(() => fieldsByKeyMap(fields), [fields]);
+  const [fieldCriteria, setFieldCriteria] = useSessionState<FieldCriterion[]>(
+    `modenx:${currentUserId}:leads:fieldfilters`,
+    [],
+    parseFieldCriteria
+  );
 
   const cities = useMemo(
     () => Array.from(new Set(visibleLeads.map((l) => l.city))).sort(),
     [visibleLeads]
   );
-  const filtered = useMemo(() => filterLeads(visibleLeads, filters), [visibleLeads, filters]);
+  const filtered = useMemo(
+    () => applyFieldCriteria(filterLeads(visibleLeads, filters), fieldCriteria, fieldsByKey),
+    [visibleLeads, filters, fieldCriteria, fieldsByKey]
+  );
   const paging = usePaging(`modenx:${currentUserId}:leads:paging`, filtered.length, JSON.stringify(filters));
   const shown = useMemo(() => pageSlice(filtered, paging.page, paging.size), [filtered, paging.page, paging.size]);
   const listTop = useRef<HTMLDivElement>(null);
@@ -104,11 +129,19 @@ function LeadsView() {
         <span className="text-[12px]" style={{ color: "var(--muted)" }}>
           {isManager
             ? "Bring in leads and accounts from a spreadsheet."
-            : "Add contacts you've found yourself — they're assigned to you automatically."}
+            : uploadsGoToMe
+              ? "Add contacts you've found yourself — they're assigned to you automatically."
+              : "Add contacts you've found yourself — a manager assigns them to someone."}
         </span>
       </div>
 
-      <FilterBar value={filters} onChange={setFilters} cities={cities} />
+      <FilterBar
+        value={filters}
+        onChange={setFilters}
+        cities={cities}
+        fieldFilterCount={fieldCriteria.length}
+        onOpenFieldFilter={() => setShowFieldFilter(true)}
+      />
 
       <div ref={listTop} className="scroll-mt-24">
         <LeadsTable leads={shown} />
@@ -124,6 +157,17 @@ function LeadsView() {
 
       {showNewLead && <NewLeadModal onClose={() => setShowNewLead(false)} />}
       {showImport && <ImportModal onClose={() => setShowImport(false)} />}
+      {showFieldFilter && (
+        <AdvancedFilterPanel
+          fields={fields}
+          criteria={fieldCriteria}
+          onApply={(next) => {
+            setFieldCriteria(next);
+            setShowFieldFilter(false);
+          }}
+          onClose={() => setShowFieldFilter(false)}
+        />
+      )}
     </div>
   );
 }

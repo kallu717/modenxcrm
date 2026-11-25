@@ -1,5 +1,6 @@
 "use client";
 
+import Modal from "@/components/Modal";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { IMPORT_COLUMNS, readSheet, stageImport, templateTsv, type StagedImport } from "@/lib/import";
@@ -15,6 +16,7 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
   const leads = useStore((s) => s.leads);
   const currentUserId = useStore((s) => s.currentUserId);
   const isManager = useStore((s) => s.isManager());
+  const toMe = useStore((s) => s.uploadsGoToMe());
   const showToast = useStore((s) => s.showToast);
   const [step, setStep] = useState<Step>("choose");
   const [staged, setStaged] = useState<StagedImport | null>(null);
@@ -79,7 +81,7 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
       const count = res.createdCount;
       const toOwnAccount = res.created.filter((x) => x.lead.assignee === currentUserId).length;
       showToast(
-        !isManager && toOwnAccount
+        toOwnAccount
           ? `Imported ${count} lead${count === 1 ? "" : "s"} — ${toOwnAccount} assigned to you`
           : `Imported ${count} lead${count === 1 ? "" : "s"}`
       );
@@ -91,12 +93,7 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,.4)" }} onClick={onClose}>
-      <div
-        className="w-full max-w-2xl rounded-xl p-5 max-h-[90vh] overflow-y-auto"
-        style={{ background: "var(--surface)", boxShadow: "var(--shadow-lg)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} label={"Import leads"} width="max-w-2xl">
         {step === "choose" && (
           <>
             <h3 className="text-[15px] font-semibold" style={{ color: "var(--ink)" }}>Import leads</h3>
@@ -223,12 +220,14 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
                     {staged.issues.length > 40 && <div>…and {staged.issues.length - 40} more</div>}
                   </div>
                 )}
-                {!isManager && (
-                  <p className="text-[12px] mt-3" style={{ color: "var(--muted)" }}>
-                    New accounts and new cities go straight to you, no approval needed. A contact in a city
-                    someone else already owns at that account stays with them — one city, one owner.
-                  </p>
-                )}
+                <p className="text-[12px] mt-3" style={{ color: "var(--muted)" }}>
+                  {toMe
+                    ? "New accounts and new cities go straight to you, no approval needed."
+                    : isManager
+                      ? "New accounts and new cities arrive unassigned, for a manager to hand out."
+                      : "New accounts and new cities arrive unassigned, for a manager to hand out, so you won't see them until one is assigned to you."}{" "}
+                  A contact in a city someone already owns at that account stays with them — one city, one owner.
+                </p>
                 {!staged.rows.length && (
                   <p className="text-[12px] mt-3" style={{ color: "var(--muted)" }}>Nothing to import — fix the rows above and try again.</p>
                 )}
@@ -245,7 +244,6 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
             </div>
           </>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }

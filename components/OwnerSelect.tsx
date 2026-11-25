@@ -1,5 +1,6 @@
 "use client";
 
+import OwnerHoverCard from "@/components/OwnerHoverCard";
 import { assignableList, repById } from "@/lib/constants";
 
 export function initials(name: string): string {
@@ -11,15 +12,17 @@ export function OwnerName({ id, size = 18 }: { id: string | null; size?: number 
   const rep = repById(id);
   if (!rep) return <span style={{ color: "var(--muted)", fontStyle: "italic" }}>Unassigned</span>;
   return (
-    <span className="inline-flex items-center gap-1.5" style={{ color: "var(--ink)" }}>
-      <span
-        className="rounded-full flex items-center justify-center text-white font-semibold shrink-0"
-        style={{ background: rep.color, width: size, height: size, fontSize: Math.round(size * 0.45) }}
-      >
-        {initials(rep.name)}
+    <OwnerHoverCard repId={rep.id}>
+      <span className="inline-flex items-center gap-1.5" style={{ color: "var(--ink)" }}>
+        <span
+          className="rounded-full flex items-center justify-center text-white font-semibold shrink-0"
+          style={{ background: rep.color, width: size, height: size, fontSize: Math.round(size * 0.45) }}
+        >
+          {initials(rep.name)}
+        </span>
+        {rep.name}
       </span>
-      {rep.name}
-    </span>
+    </OwnerHoverCard>
   );
 }
 

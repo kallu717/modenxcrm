@@ -86,7 +86,7 @@ function AccountView() {
       {/* Header */}
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-[21px] font-semibold" style={{ color: "var(--ink)" }}>{account.name}</h1>
+          <h1 className="text-[19px] font-semibold" style={{ color: "var(--ink)" }}>{account.name}</h1>
           <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[11.5px]">
             <span className="px-2 py-0.5 rounded font-mono" style={{ background: "var(--accent-soft)", color: "var(--accent-ink)" }}>
               {account.type}

@@ -4,11 +4,13 @@ import { computeRepStats } from "../lib/reports";
 import { countWorkingDays } from "../lib/calendar";
 import type { ImportRow } from "../lib/import";
 import { makeLead, resetStore, store, leadById } from "./helpers";
+import { setDirectory } from "../lib/constants";
+import { DEMO_REPS } from "../lib/seed";
 
 const as = (userId: string) => useStore.setState({ currentUserId: userId });
 const pending = () => store().changeRequests.filter((c) => c.status === "pending");
 const importRow = (p: Partial<ImportRow>): ImportRow => ({
-  name: "Imported Person", title: "Founder", account: "Fresh Co", type: "Brand",
+  firstName: "Imported", lastName: "Person", title: "Founder", account: "Fresh Co", type: "Brand",
   email: "", verified: "", phone: "", city: "Pune", notes: "", ...p,
 });
 
@@ -92,13 +94,30 @@ describe("K. Adding leads", () => {
     expect(l.assignee).toBe("priya");
   });
 
-  it("K2c manager adding in a new city of an assigned account — waits unassigned", () => {
+  it("K2c manager adding in a new city of an assigned account — it's theirs (uploads go to the uploader)", () => {
     const l = store().createLead(input({ account: "Luma Home", city: "Pune" }))!;
-    expect(l.assignee).toBeNull();
+    expect(l.assignee).toBe("meera");
   });
 
-  it("K3 manager adding at a new account leaves it unassigned", () => {
+  it("K3 manager adding at a new account — it's theirs", () => {
+    expect(store().createLead(input())?.assignee).toBe("meera");
+  });
+
+  it("K3b ✗ with the admin's auto-assign switched off, new contacts wait unassigned", () => {
+    useStore.setState({ autoAssignUploads: false });
     expect(store().createLead(input())?.assignee).toBeNull();
+    as("priya");
+    expect(store().createLead(input({ email: "p@fresh.com", account: "Fresh Two" }))?.assignee).toBeNull();
+  });
+
+  it("K3c ✗ an admin's new contact is never theirs (admins don't own leads)", () => {
+    setDirectory([...DEMO_REPS, { id: "asha", name: "Asha", role: "Admin", color: "#000" }]);
+    try {
+      as("asha");
+      expect(store().createLead(input())?.assignee).toBeNull();
+    } finally {
+      setDirectory(DEMO_REPS);
+    }
   });
 
   it("K4 an email already in use (any case) is refused", () => {
@@ -120,7 +139,7 @@ describe("K. Adding leads", () => {
   it("K7 rep imports two contacts for one new account", () => {
     as("priya");
     const maxBefore = Math.max(...store().leads.map((l) => Number(l.id.slice(1))));
-    store().importLeads([importRow({ name: "One" }), importRow({ name: "Two" })], "sheet.xlsx");
+    store().importLeads([importRow({ lastName: "One" }), importRow({ lastName: "Two" })], "sheet.xlsx");
     const added = store().leads.filter((l) => l.account === "Fresh Co");
     expect(added.map((l) => l.assignee)).toEqual(["priya", "priya"]);
     expect(added.map((l) => Number(l.id.slice(1)))).toEqual([maxBefore + 1, maxBefore + 2]);

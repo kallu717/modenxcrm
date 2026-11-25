@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Modal from "@/components/Modal";
+import { useState } from "react";
 import { SYSTEM_THEME, THEMES, applyTheme, readTheme, type ThemeMode } from "@/lib/themes";
 
 function Swatch({
@@ -14,7 +15,7 @@ function Swatch({
   name: string;
   blurb: string;
   active: boolean;
-  onPick: () => void;
+  onPick: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
   return (
     <button
@@ -58,15 +59,24 @@ function Swatch({
 export default function ThemesModal({ onClose }: { onClose: () => void }) {
   const [current, setCurrent] = useState(readTheme);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const pick = (id: string) => setCurrent(applyTheme(id));
+  // The new theme spreads out in a circle from the swatch that was clicked
+  // (where the browser supports it; otherwise it just switches).
+  const pick = (id: string, e?: React.MouseEvent<HTMLElement>) => {
+    const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (!doc.startViewTransition || reduced || !e) {
+      setCurrent(applyTheme(id));
+      return;
+    }
+    const x = e.clientX || innerWidth / 2;
+    const y = e.clientY || innerHeight / 2;
+    const r = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+    const root = document.documentElement.style;
+    root.setProperty("--reveal-x", `${x}px`);
+    root.setProperty("--reveal-y", `${y}px`);
+    root.setProperty("--reveal-r", `${r}px`);
+    doc.startViewTransition(() => setCurrent(applyTheme(id)));
+  };
   const group = (mode: ThemeMode, title: string) => (
     <div>
       <p className="text-[11.5px] uppercase tracking-wide font-mono mb-2" style={{ color: "var(--muted)" }}>
@@ -74,29 +84,17 @@ export default function ThemesModal({ onClose }: { onClose: () => void }) {
       </p>
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         {THEMES.filter((t) => t.mode === mode).map((t) => (
-          <Swatch key={t.id} {...t} active={current === t.id} onPick={() => pick(t.id)} />
+          <Swatch key={t.id} {...t} active={current === t.id} onPick={(e) => pick(t.id, e)} />
         ))}
       </div>
     </div>
   );
 
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,.45)" }}
-      onClick={onClose}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Themes"
-        className="w-full max-w-[760px] max-h-[90vh] overflow-auto rounded-xl p-5 space-y-5"
-        style={{ background: "var(--surface)", boxShadow: "var(--shadow-lg)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} label={"Themes"} width="max-w-[760px]" className="space-y-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-[16px] font-semibold" style={{ color: "var(--ink)" }}>
+            <h2 className="text-[15px] font-semibold" style={{ color: "var(--ink)" }}>
               Themes
             </h2>
             <p className="text-[12.5px] mt-0.5" style={{ color: "var(--muted)" }}>
@@ -106,7 +104,7 @@ export default function ThemesModal({ onClose }: { onClose: () => void }) {
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label="Close" data-tip="Close"
             className="w-8 h-8 rounded-md text-[18px] leading-none"
             style={{ color: "var(--ink-2)" }}
           >
@@ -132,7 +130,6 @@ export default function ThemesModal({ onClose }: { onClose: () => void }) {
             Done
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

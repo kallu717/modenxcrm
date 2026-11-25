@@ -234,3 +234,274 @@ button, input, select {
     grid-column: span var(--w);
   }
 }
+
+
+/* Pop-ups and the side panel (vibecodecomponents.com "Modal" and "Slide-Over
+   Panel" prompts): the page behind blurs, the pop-up fades and scales in, the
+   lead panel slides in from the right. Toasts slide up. Calmer for people who
+   ask their device for less motion. */
+.modal-backdrop,
+.drawer-backdrop,
+.drawer-backdrop-left {
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: fade-in 0.16s ease-out;
+}
+.modal-backdrop > :first-child {
+  animation: pop-in 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.drawer-backdrop > :first-child {
+  animation: slide-in-right 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.drawer-backdrop-left > :first-child {
+  animation: slide-in-left 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.toast-in {
+  animation: toast-up 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+}
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+}
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); }
+}
+@keyframes toast-up {
+  from { opacity: 0; transform: translateY(12px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop, .drawer-backdrop, .drawer-backdrop-left,
+  .modal-backdrop > :first-child, .drawer-backdrop > :first-child, .drawer-backdrop-left > :first-child,
+  .toast-in {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------- motion kit
+   Effects written for bdCRM after free, open-source patterns: Magic UI (Blur
+   Fade, Magic Card, Border Beam, Number Ticker, Animated List, Circular
+   Progress, Theme Toggler), Motion Primitives (sliding highlight) and
+   shadcn/ui (Skeleton, Tooltip, Hover Card). Colours come from the theme; all
+   of it goes still under "reduce motion" (bottom of this block). */
+
+/* Blur Fade: content rises in out of a slight blur, one after another (--i). */
+.fx-rise {
+  animation: fx-rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+/* Whole-page fade: opacity only. A transform or filter here would trap every
+   pop-up window (position: fixed) inside the page. */
+.fx-fade { animation: fx-fade 0.35s ease-out backwards; }
+@keyframes fx-fade { from { opacity: 0; } }
+
+@keyframes fx-rise {
+  from { opacity: 0; transform: translateY(8px); filter: blur(5px); }
+}
+
+/* Skeleton shimmer. */
+.fx-skeleton {
+  background: linear-gradient(100deg, var(--surface-2) 30%, color-mix(in srgb, var(--surface-2) 55%, var(--surface)) 50%, var(--surface-2) 70%);
+  background-size: 300% 100%;
+  animation: fx-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes fx-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: 0 0; }
+}
+
+/* Magic Card: a soft light follows the mouse (--mx, --my set in fx.tsx). */
+.fx-glow { position: relative; isolation: isolate; }
+.fx-glow::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.25s;
+  background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--accent) 11%, transparent), transparent 70%);
+}
+.fx-glow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  padding: 1px;
+  opacity: 0;
+  transition: opacity 0.25s;
+  background: radial-gradient(200px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--accent) 55%, transparent), transparent 70%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+@media (hover: hover) {
+  .fx-glow:hover::before, .fx-glow:hover::after { opacity: 1; }
+}
+
+/* Lift on hover for clickable cards and rows. */
+.fx-lift { transition: transform 0.18s ease, box-shadow 0.18s ease; }
+@media (hover: hover) {
+  .fx-lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+}
+
+/* Border Beam: a short light travels round the edge of a card that needs attention. */
+@property --fx-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+.fx-beam::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+  background: conic-gradient(from var(--fx-angle), transparent 0 78%, color-mix(in srgb, var(--beam, var(--crit)) 30%, transparent) 86%, var(--beam, var(--crit)) 94%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  animation: fx-beam 4.5s linear infinite;
+}
+@keyframes fx-beam {
+  to { --fx-angle: 360deg; }
+}
+
+/* Circular progress: the ring draws itself in. */
+.fx-ring {
+  transition: stroke-dashoffset 0.9s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: fx-ring-in 1s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes fx-ring-in {
+  from { stroke-dashoffset: var(--ring-from); }
+}
+
+/* Animated List: rows slide in, staggered by --i (first few only). */
+.fx-list > * {
+  animation: fx-slide-in 0.38s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.fx-list > :nth-child(2) { animation-delay: 35ms; }
+.fx-list > :nth-child(3) { animation-delay: 70ms; }
+.fx-list > :nth-child(4) { animation-delay: 105ms; }
+.fx-list > :nth-child(5) { animation-delay: 140ms; }
+.fx-list > :nth-child(n + 6) { animation-delay: 175ms; }
+@keyframes fx-slide-in {
+  from { opacity: 0; transform: translateX(-8px); }
+}
+
+/* Sliding nav highlight (Masthead). */
+.fx-nav-pill {
+  position: absolute;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  pointer-events: none;
+  transition: left 0.28s cubic-bezier(0.3, 0.9, 0.3, 1), top 0.28s cubic-bezier(0.3, 0.9, 0.3, 1), width 0.28s cubic-bezier(0.3, 0.9, 0.3, 1), opacity 0.2s;
+}
+
+/* Pipeline: a card being dragged lifts and tilts; a column you can drop on glows. */
+.fx-dragging {
+  transform: rotate(-2deg) scale(1.03);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.22);
+  opacity: 0.85;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+/* Tooltip: any element with data-tip shows it on hover or keyboard focus. */
+[data-tip] { position: relative; }
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 7px);
+  transform: translate(-50%, 3px);
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  background: var(--ink);
+  color: var(--bg);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s, transform 0.14s;
+  transition-delay: 0s;
+  z-index: 140;
+}
+[data-tip][data-tip-side="bottom"]::after { bottom: auto; top: calc(100% + 7px); transform: translate(-50%, -3px); }
+[data-tip]:hover::after,
+[data-tip]:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition-delay: 0.35s;
+}
+
+/* Hover card (owner details). */
+.fx-hovercard {
+  animation: pop-in 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+/* Theme change: the new theme spreads out in a circle from the click. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-new(root) {
+  animation: fx-theme-reveal 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes fx-theme-reveal {
+  from { clip-path: circle(0 at var(--reveal-x, 50%) var(--reveal-y, 50%)); }
+  to { clip-path: circle(var(--reveal-r, 150vmax) at var(--reveal-x, 50%) var(--reveal-y, 50%)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-rise, .fx-fade, .fx-list > *, .fx-ring, .fx-hovercard, ::view-transition-new(root) { animation: none; }
+  .fx-skeleton, .fx-beam::after { animation: none; }
+  .fx-nav-pill, .fx-lift, .fx-ring { transition: none; }
+  .fx-lift:hover { transform: none; }
+  .fx-dragging { transform: none; }
+}
+
+/* Bars grow in from zero. */
+.fx-bar { animation: fx-grow 0.8s cubic-bezier(0.2, 0.8, 0.2, 1); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes fx-grow { from { width: 0; } }
+@media (prefers-reduced-motion: reduce) { .fx-bar { animation: none; transition: none; } }
+
+/* A row that scrolls sideways without showing a scrollbar (top menu on narrow screens). */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+/* On narrow screens the menu fades at the right edge, a hint that it scrolls. */
+@media (max-width: 1023px) {
+  nav.no-scrollbar { mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); padding-right: 28px; }
+}
+
+/* ---- One feel for every control (low specificity, so a component's own
+   classes still win). Keyboard users get a clear ring; buttons respond to
+   hover and press; disabled ones say so. */
+:where(button, a, select, input, textarea, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+:where(input, select, textarea):focus-visible { outline-offset: 0; }
+:where(button, select, [role="button"]):not(:disabled) { cursor: pointer; }
+:where(button):disabled { cursor: not-allowed; }
+:where(button) {
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s, filter 0.15s, transform 0.08s;
+}
+:where(button):not(:disabled):active { transform: scale(0.98); }
+/* Filled (accent) buttons brighten a touch on hover; outlined ones pick up the accent edge. */
+@media (hover: hover) {
+  button[style*="background: var(--accent)"]:not(:disabled):hover { filter: brightness(1.1); }
+  button.border:not(:disabled):not([style*="--good"]):not([style*="--crit"]):not([style*="--warn"]):hover { border-color: var(--accent) !important; }
+}
+::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+@media (prefers-reduced-motion: reduce) {
+  :where(button):not(:disabled):active { transform: none; }
+}

@@ -26,7 +26,7 @@ def test_assigning_an_account_moves_every_contact_in_one_save(meera, priya):
     assert len(priya.get("/api/leads").json()) == 2
 
 
-def test_one_location_never_has_two_owners(meera, priya, arjun):
+def test_one_location_never_has_two_owners(uploads_unassigned, meera, priya, arjun):
     import_rows(meera, [ROW, ROHAN])          # both Studio Weft, both Bengaluru
     rows = list(_all(meera).values())
     # only half the location handed over: the second contact would stay with no one, which is allowed
@@ -66,7 +66,7 @@ def test_city_names_are_matched_loosely_and_blank_city_is_one_location(meera, pr
     assert r.status_code == 409          # no city and "—" are the same (unknown) location
 
 
-def test_a_new_city_under_an_assigned_account_starts_unassigned(meera, priya):
+def test_a_new_city_under_an_assigned_account_starts_unassigned(uploads_unassigned, meera, priya):
     import_rows(meera, [ROW])
     first = _all(meera)[ROW["email"]]
     assert meera.post("/api/sync", json={"leads": [_put(first, assignee=_uid(priya))]}).status_code == 200
@@ -105,7 +105,7 @@ def test_moving_a_contact_to_another_city_must_follow_that_citys_owner(meera, pr
     assert r.status_code == 200
 
 
-def test_a_failed_save_changes_nothing(meera, priya, arjun):
+def test_a_failed_save_changes_nothing(uploads_unassigned, meera, priya, arjun):
     import_rows(meera, [ROW, ROHAN])
     rows = list(_all(meera).values())
     r = meera.post("/api/sync", json={"leads": [
@@ -177,7 +177,7 @@ def test_sync_needs_the_csrf_header(priya):
     assert priya.post("/api/sync", json={}, headers={"X-Requested-With": ""}).status_code == 403
 
 
-def test_different_spellings_of_one_city_are_one_location(meera, priya, arjun):
+def test_different_spellings_of_one_city_are_one_location(uploads_unassigned, meera, priya, arjun):
     gurgaon = dict(ROW, name="G1", email="g1@studioweft.com", city="Gurgaon")
     gurugram = dict(ROW, name="G2", email="g2@studioweft.com", city="Gurugram")
     import_rows(meera, [gurgaon, gurugram])

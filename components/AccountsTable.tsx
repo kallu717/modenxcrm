@@ -1,5 +1,6 @@
 "use client";
 
+import OwnerHoverCard from "@/components/OwnerHoverCard";
 import { useStore } from "@/lib/store";
 import { STAGES, repById } from "@/lib/constants";
 import { planById, fmtInr, leadMrr, agingBucket } from "@/lib/revenue";
@@ -179,6 +180,7 @@ export default function AccountsTable({
                       <span style={{ color: "var(--muted)" }}>· {a.locations.length} cities</span>
                     </span>
                   ) : owner ? (
+                    <OwnerHoverCard repId={owner.id}>
                     <span className="flex items-center gap-1.5" style={{ color: "var(--ink)" }}>
                       <span
                         className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-semibold"
@@ -193,6 +195,7 @@ export default function AccountsTable({
                         </span>
                       )}
                     </span>
+                    </OwnerHoverCard>
                   ) : (
                     <span style={{ color: "var(--muted)", fontStyle: "italic" }}>
                       Unassigned{a.locations.length > 1 ? ` · ${a.locations.length} cities` : ""}

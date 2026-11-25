@@ -1,5 +1,6 @@
 "use client";
 
+import Modal from "@/components/Modal";
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { CITIES, repById } from "@/lib/constants";
@@ -16,10 +17,11 @@ const inputStyle = { borderColor: "var(--grid)", background: "var(--surface)", c
 export default function NewLeadModal({ onClose }: { onClose: () => void }) {
   const leads = useStore((s) => s.leads);
   const showToast = useStore((s) => s.showToast);
-  const isManager = useStore((s) => s.isManager());
+  const toMe = useStore((s) => s.uploadsGoToMe());
 
   const [form, setForm] = useState({
-    name: "",
+    firstName: "",
+    lastName: "",
     title: "",
     account: "",
     type: "Brand" as AccountType,
@@ -51,7 +53,7 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
 
   const submit = async () => {
     if (busy) return;
-    const required = ["name", "title", "account", "type", "city"] as const;
+    const required = ["firstName", "lastName", "title", "account", "type", "city"] as const;
     const missing = required.filter((k) => !form[k].trim());
     if (missing.length) {
       setError("Fill in all required fields.");
@@ -79,7 +81,8 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
     let lead;
     try {
       const created = await api.createLead({
-        name: form.name,
+        firstName: form.firstName,
+        lastName: form.lastName,
         title: form.title,
         account: form.account,
         type: existingAccount ? existingAccount.type : form.type,
@@ -102,16 +105,7 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,.4)" }}
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-lg rounded-xl p-5 max-h-[90vh] overflow-y-auto"
-        style={{ background: "var(--surface)", boxShadow: "var(--shadow-lg)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} label={"New lead"} width="max-w-lg">
         <h3 className="text-[15px] font-semibold" style={{ color: "var(--ink)" }}>
           New lead
         </h3>
@@ -123,16 +117,27 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
         <div className="grid grid-cols-2 gap-3 mt-4">
           <div>
             <label className="block text-[11px] mb-1" style={{ color: "var(--muted)" }}>
-              Contact name *
+              First name *
             </label>
             <input
-              value={form.name}
-              onChange={(e) => set("name", e.target.value)}
+              value={form.firstName}
+              onChange={(e) => set("firstName", e.target.value)}
               className="w-full px-2.5 py-1.5 rounded-md text-[13px] border"
               style={inputStyle}
             />
           </div>
           <div>
+            <label className="block text-[11px] mb-1" style={{ color: "var(--muted)" }}>
+              Last name *
+            </label>
+            <input
+              value={form.lastName}
+              onChange={(e) => set("lastName", e.target.value)}
+              className="w-full px-2.5 py-1.5 rounded-md text-[13px] border"
+              style={inputStyle}
+            />
+          </div>
+          <div className="col-span-2">
             <label className="block text-[11px] mb-1" style={{ color: "var(--muted)" }}>
               Job title *
             </label>
@@ -165,7 +170,7 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
                 {existingOwner
                   ? `${form.city.trim() || "this city"} is owned by ${existingOwner.name}. This contact will join them.`
                   : form.city.trim()
-                    ? `nobody owns ${form.city.trim()} there yet, so ${isManager ? "it will wait for you to assign it" : "it will be yours"}.`
+                    ? `nobody owns ${form.city.trim()} there yet, so ${toMe ? "it will be yours" : "it will arrive unassigned"}.`
                     : "enter a city to see who it goes to."}
               </p>
             )}
@@ -278,7 +283,6 @@ export default function NewLeadModal({ onClose }: { onClose: () => void }) {
             Add lead
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

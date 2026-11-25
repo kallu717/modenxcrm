@@ -1,5 +1,6 @@
 "use client";
 
+import { celebrate } from "@/lib/confetti";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { STAGES, repById } from "@/lib/constants";
@@ -43,6 +44,7 @@ function LeadCard({
   const mtg = nextMeeting(lead);
   const priority = effectivePriority(lead);
   const pStyle = PRIORITY_STYLE[priority];
+  const [dragging, setDragging] = useState(false);
 
   return (
     <div
@@ -50,9 +52,11 @@ function LeadCard({
       onDragStart={(e) => {
         onDragStart(lead.id);
         e.dataTransfer.effectAllowed = "move";
+        setDragging(true);
       }}
+      onDragEnd={() => setDragging(false)}
       onClick={() => onOpen(lead.id)}
-      className="rounded-lg border p-3 mb-2 cursor-pointer select-none"
+      className={`rounded-lg border p-3 mb-2 cursor-pointer select-none fx-lift ${dragging ? "fx-dragging" : ""}`}
       style={{ background: "var(--surface)", borderColor: "var(--grid)", boxShadow: "var(--shadow)" }}
     >
       <div className="flex items-start justify-between gap-2">
@@ -147,6 +151,8 @@ export default function KanbanBoard({ leads }: { leads: Lead[] }) {
               style={{
                 background: "var(--surface-2)",
                 borderColor: dragOverStage === stage.id ? "var(--accent)" : "var(--grid)",
+                boxShadow: dragOverStage === stage.id ? "0 0 0 3px var(--accent-soft), 0 10px 28px rgba(0,0,0,.12)" : "none",
+                transition: "box-shadow .18s, border-color .18s",
               }}
               onDragOver={(e) => {
                 e.preventDefault();
@@ -160,6 +166,7 @@ export default function KanbanBoard({ leads }: { leads: Lead[] }) {
                 const lead = leads.find((l) => l.id === dragId);
                 if (lead && lead.stage !== stage.id) {
                   setLeadStage(lead.id, stage.id, "board");
+                  if (stage.id === "won") celebrate({ x: e.clientX, y: e.clientY });
                   if (stage.id === "won" && !lead.plan) {
                     setWonModalLead({ ...lead, stage: stage.id });
                   } else {

@@ -67,7 +67,7 @@ export default function Pager({
               style={{ borderColor: "var(--grid)", color: "var(--ink)" }}
               disabled={current === 1}
               onClick={() => go(current - 1)}
-              aria-label="Previous page"
+              aria-label="Previous page" data-tip="Previous page"
             >
               ‹ Prev
             </button>
@@ -101,7 +101,7 @@ export default function Pager({
               style={{ borderColor: "var(--grid)", color: "var(--ink)" }}
               disabled={current === pages}
               onClick={() => go(current + 1)}
-              aria-label="Next page"
+              aria-label="Next page" data-tip="Next page"
             >
               Next ›
             </button>

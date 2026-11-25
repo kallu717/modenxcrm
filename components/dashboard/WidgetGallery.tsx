@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import Modal from "@/components/Modal";
 import { widgetsForRole, type WidgetId, type WidgetPlacement } from "@/lib/widgets";
 import type { Role } from "@/lib/types";
 
@@ -19,37 +19,21 @@ export default function WidgetGallery({
   onAdd: (id: WidgetId) => void;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   const available = widgetsForRole(role);
   const onBoard = new Set(layout.map((w) => w.id));
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,.45)" }} onClick={onClose}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Add a widget"
-        className="w-full max-w-[820px] max-h-[88vh] overflow-auto rounded-xl p-5 space-y-5"
-        style={{ background: "var(--surface)", boxShadow: "var(--shadow-lg)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} label={"Add a widget"} width="max-w-[820px]" className="space-y-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-[16px] font-semibold" style={{ color: "var(--ink)" }}>
+            <h2 className="text-[15px] font-semibold" style={{ color: "var(--ink)" }}>
               Add a widget
             </h2>
             <p className="text-[12.5px] mt-0.5" style={{ color: "var(--muted)" }}>
               New widgets go to the top. Drag them where you want and resize from the corner.
             </p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="w-8 h-8 rounded-md text-[18px] leading-none" style={{ color: "var(--ink-2)" }}>
+          <button type="button" onClick={onClose} aria-label="Close" data-tip="Close" className="w-8 h-8 rounded-md text-[18px] leading-none" style={{ color: "var(--ink-2)" }}>
             ×
           </button>
         </div>
@@ -98,7 +82,6 @@ export default function WidgetGallery({
             </div>
           );
         })}
-      </div>
-    </div>
+    </Modal>
   );
 }

@@ -5,6 +5,7 @@
 // Widgets only ever show what the person can already see elsewhere: the
 // store holds just their own leads (reps) or everyone's (managers).
 
+import { NumberTicker, ProgressRing } from "@/components/fx";
 import Link from "next/link";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
@@ -60,12 +61,12 @@ function Empty({ children }: { children: React.ReactNode }) {
 
 function Tile({ label, value, sub, tone, href }: { label: string; value: React.ReactNode; sub?: React.ReactNode; tone?: "crit" | "warn" | "good"; href?: string }) {
   const body = (
-    <div className="rounded-lg p-3 h-full" style={{ background: "var(--surface-2)", borderTop: `3px solid ${tone ? `var(--${tone})` : "var(--grid)"}` }}>
+    <div className={`rounded-lg p-3 h-full ${href ? "fx-lift" : ""}`} style={{ background: "var(--surface-2)", borderTop: `3px solid ${tone ? `var(--${tone})` : "var(--grid)"}` }}>
       <p className="text-[11px] uppercase tracking-wide font-mono" style={{ color: "var(--muted)" }}>
         {label}
       </p>
       <p className="text-[22px] font-semibold mt-1 leading-none" style={{ color: tone ? `var(--${tone})` : "var(--ink)" }}>
-        {value}
+        {typeof value === "number" ? <NumberTicker value={value} /> : value}
       </p>
       {sub && (
         <div className="text-[11.5px] mt-1" style={{ color: "var(--ink-2)" }}>
@@ -91,7 +92,7 @@ function Progress({ done, target }: { done: number; target: number }) {
   const pct = target > 0 ? Math.min(100, Math.round((done / target) * 100)) : 0;
   return (
     <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--surface-2)" }}>
-      <div className="h-full rounded-full" style={{ width: `${pct}%`, background: done >= target ? "var(--good)" : "var(--accent)" }} />
+      <div className="h-full rounded-full transition-[width] duration-700" style={{ width: `${pct}%`, background: done >= target ? "var(--good)" : "var(--accent)" }} />
     </div>
   );
 }
@@ -99,7 +100,7 @@ function Progress({ done, target }: { done: number; target: number }) {
 function Bar({ value, max, color = "var(--accent)" }: { value: number; max: number; color?: string }) {
   return (
     <div className="h-2 rounded-full overflow-hidden flex-1" style={{ background: "var(--surface-2)" }}>
-      <div className="h-full rounded-full" style={{ width: `${max ? Math.round((value / max) * 100) : 0}%`, background: color }} />
+      <div className="h-full rounded-full fx-bar" style={{ width: `${max ? Math.round((value / max) * 100) : 0}%`, background: color }} />
     </div>
   );
 }
@@ -141,11 +142,11 @@ function LeadRow({ lead, when, late, action }: { lead: Lead; when?: string; late
 function LeadList({ leads, when, empty, late }: { leads: Lead[]; when?: (l: Lead) => string | undefined; empty: string; late?: (l: Lead) => boolean }) {
   if (!leads.length) return <Empty>{empty}</Empty>;
   return (
-    <>
+    <div className="fx-list">
       {leads.map((l) => (
         <LeadRow key={l.id} lead={l} when={when?.(l)} late={late?.(l)} />
       ))}
-    </>
+    </div>
   );
 }
 
@@ -185,9 +186,10 @@ function Followups() {
   const fu = useMemo(() => followupsDue(mine), [mine]);
   const rows = [...fu.overdue, ...fu.today];
   return (
-    <Frame count={rows.length} more={{ href: "/followups", label: "All follow-ups" }}>
+    <Frame count={rows.length} alert={fu.overdue.length > 0} more={{ href: "/followups", label: "All follow-ups" }}>
       {rows.length ? (
-        rows.map((l) => (
+        <div className="fx-list">
+        {rows.map((l) => (
           <LeadRow
             key={l.id}
             lead={l}
@@ -207,7 +209,8 @@ function Followups() {
               </button>
             }
           />
-        ))
+        ))}
+        </div>
       ) : (
         <Empty>Nothing overdue or due today. Nice.</Empty>
       )}
@@ -222,7 +225,8 @@ function Meetings() {
   return (
     <Frame count={meetings.length} more={{ href: "/calendar", label: "Calendar" }}>
       {meetings.length ? (
-        meetings.map(({ lead, meeting }) => (
+        <div className="fx-list">
+        {meetings.map(({ lead, meeting }) => (
           <div key={lead.id + meeting.id} className={rowCls + " cursor-pointer"} style={rowStyle} onClick={() => openLead(lead.id)}>
             <div className="w-[88px] shrink-0">
               <p className="text-[12.5px] font-medium" style={{ color: "var(--ink)" }}>
@@ -242,7 +246,8 @@ function Meetings() {
               </p>
             </div>
           </div>
-        ))
+        ))}
+        </div>
       ) : (
         <Empty>No meetings booked for the next 7 days.</Empty>
       )}
@@ -259,7 +264,12 @@ function Payments() {
   const { openLead } = useContext(DashboardActions);
   const due = useMemo(() => duePayments(isManager ? leads : mine, payments, reminders), [isManager, leads, mine, payments, reminders]);
   return (
-    <Frame count={due.length} subtitle={isManager ? "whole team" : undefined} more={{ href: "/followups", label: "Follow-ups" }}>
+    <Frame
+      count={due.length}
+      alert={due.some((d) => d.status === "overdue")}
+      subtitle={isManager ? "whole team" : undefined}
+      more={{ href: "/followups", label: "Follow-ups" }}
+    >
       {due.length ? <PaymentsList due={due} onOpenLead={openLead} /> : <Empty>No debits due in the next 7 days, and nothing left unpaid.</Empty>}
     </Frame>
   );
@@ -296,14 +306,18 @@ function Calls() {
   const c = useMemo(() => callsToday(leads, me, targets), [leads, me, targets]);
   return (
     <Frame>
-      <p className="text-[26px] font-semibold leading-none" style={{ color: c.done >= c.target ? "var(--good)" : "var(--ink)" }}>
-        {c.done}
-        <span className="text-[14px] font-normal" style={{ color: "var(--muted)" }}>
-          {" "}/ {c.target} calls
-        </span>
-      </p>
-      <div className="mt-2">
-        <Progress done={c.done} target={c.target} />
+      <div className="flex items-center gap-4">
+        <ProgressRing done={c.done} target={c.target}>
+          <span className="text-[13px] font-semibold font-mono" style={{ color: c.done >= c.target ? "var(--good)" : "var(--ink)" }}>
+            {c.target > 0 ? Math.min(100, Math.round((c.done / c.target) * 100)) : 0}%
+          </span>
+        </ProgressRing>
+        <p className="text-[26px] font-semibold leading-none" style={{ color: c.done >= c.target ? "var(--good)" : "var(--ink)" }}>
+          <NumberTicker value={c.done} />
+          <span className="text-[14px] font-normal" style={{ color: "var(--muted)" }}>
+            {" "}/ {c.target} calls
+          </span>
+        </p>
       </div>
     </Frame>
   );
@@ -369,7 +383,7 @@ function Won() {
   return (
     <Frame count={rows.length}>
       <p className="text-[26px] font-semibold leading-none" style={{ color: rows.length ? "var(--good)" : "var(--ink)" }}>
-        {rows.length}
+        <NumberTicker value={rows.length} />
         <span className="text-[13px] font-normal" style={{ color: "var(--muted)" }}>
           {" "}deal{rows.length === 1 ? "" : "s"} · {fmtInr(mrr)}/month
         </span>

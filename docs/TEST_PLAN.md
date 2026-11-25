@@ -238,6 +238,55 @@ Every contact needs an email or a phone (or both). Phones are 10 digits (a +91 o
 | PHONE-10 | ✗ | Edit a phone to a bad number, or remove a lead's only email/phone | Refused (422) | FE PH10, BE `test_PH9_editing_to_a_bad_phone_or_to_nothing_is_refused` |
 | PHONE-11 | | Saved leads from before the rule | Upgrade never fails; an old number that doesn't fit, or an older twin, gets no duplicate key and the lead still saves | BE `test_saved_phones_get_their_duplicate_key_and_old_twins_never_block_the_upgrade`, `test_PH11_unchanged_old_style_phone_does_not_block_other_edits` |
 
+### 2.13 Who gets uploaded contacts (ASSIGN)
+
+An admin's switch on Settings: on (the default) gives contacts a rep or manager imports or adds to that person; off leaves them unassigned for a manager to hand out.
+
+| ID | | Do | Expect | How |
+|---|---|---|---|---|
+| ASSIGN-01 | | Switch on: a manager imports a sheet or adds a New lead | The new contacts are the manager's | BE `test_AA2_on_a_managers_import_goes_to_the_manager`, `test_AA4_on_a_managers_new_lead_goes_to_the_manager`, FE K2c, K3 |
+| ASSIGN-02 | | Switch on: a rep imports or adds | The rep's | BE `test_AA3_on_a_reps_import_and_new_lead_go_to_the_rep` |
+| ASSIGN-03 | | Switch off: anyone imports or adds | Arrive unassigned; a rep doesn't get them back | BE `test_AA5_off_imports_and_new_leads_arrive_unassigned`, FE K3b |
+| ASSIGN-04 | | A city someone already owns at that account, switch on or off | Goes to that owner | BE `test_AA6_a_city_with_an_owner_keeps_its_owner_either_way` |
+| ASSIGN-05 | ✗ | An admin uploads | Unassigned (admins don't own leads) | BE `test_AA7_an_admins_upload_stays_unassigned`, FE K3c |
+| ASSIGN-06 | ✗ | A rep or manager tries to change the switch | Refused (403) | BE `test_AA8_only_an_admin_can_change_it` |
+| ASSIGN-07 | ✗ | Unknown setting, or a value that isn't on/off | Refused (422) | BE `test_AA9_bad_settings_are_refused` |
+| ASSIGN-08 | | Lead Desk feed | Always unassigned | BE `test_AA10_lead_desk_feed_always_arrives_unassigned` |
+| ASSIGN-09 | | Admin flips the switch on Settings | Saved straight away; the text under it says what on/off means | UI |
+
+### 2.14 First and last name (NAME)
+
+The New lead form and the import sheet take First name and Last name as two separate, both-required fields (no more single "Contact name"); the server merges them into the one name shown everywhere. A caller that only ever sends a plain `name` (the Lead Desk feed) still works unchanged.
+
+| ID | | Do | Expect | How |
+|---|---|---|---|---|
+| NAME-01 | | Import or add a lead with both names | Created; shown as "First Last" everywhere | FE H1b, BE `test_NAME1_first_and_last_name_are_merged_into_the_contact_name`, `test_NAME6_new_lead_form_requires_both_names_too`, UI |
+| NAME-02 | ✗ | Import or add with First name only | Refused: "missing Last name" | FE H1b, BE `test_NAME2_missing_last_name_is_refused`, `test_NAME6_new_lead_form_requires_both_names_too`, UI |
+| NAME-03 | ✗ | Import or add with Last name only | Refused: "missing First name" | FE H1b, BE `test_NAME3_missing_first_name_is_refused`, UI |
+| NAME-04 | ✗ | Import or add with neither | Refused: "missing First name, Last name" | FE H1b, BE `test_NAME4_neither_first_nor_last_name_is_refused`, UI |
+| NAME-05 | | A caller that sends only `name` (Lead Desk feed) | Still accepted, unchanged | BE `test_NAME5_a_legacy_plain_name_still_works` |
+| NAME-06 | | Extra spaces around either name | Trimmed before they're merged | BE `test_NAME7_extra_spaces_around_each_name_are_trimmed` |
+
+### 2.15 Filter leads by field (FIELDFILTER)
+
+A "Filter by field" window on Leads, after Zoho CRM's Leads filter panel: search for any field, tick it, and its own is/contains/before… row appears right there. Tick several and Apply keeps only leads matching every one of them (an AND).
+
+| ID | | Do | Expect | How |
+|---|---|---|---|---|
+| FIELDFILTER-01 | | Tick one field, choose an operator and a value, Apply | Only matching leads shown; the button shows a count | FE FF2–FF9, UI |
+| FIELDFILTER-02 | | Tick several fields | Every one must match (an AND) | FE FF11, UI |
+| FIELDFILTER-03 | | Text field: is / is not / contains / doesn't contain / starts with / ends with / is empty / is not empty | Each works as named | FE FF2, FF3 |
+| FIELDFILTER-04 | | A list field (Stage, Priority, Account type, Email quality): is / is not | Works from its fixed list of values | FE FF4, FF5 |
+| FIELDFILTER-05 | | A number field (Score): =, ≠, >, <, between | Each works, "between" takes either bound first | FE FF6 |
+| FIELDFILTER-06 | | A date field (Created on, Owner since, Next follow-up, Won on): on / before / after / between / is empty / is not empty | Each works | FE FF7, FF8 |
+| FIELDFILTER-07 | | Multiple sources: is Yes / No | Works | FE FF9 |
+| FIELDFILTER-08 | | Owner: is a rep, or is Unassigned | Each works, kept apart from each other | FE FF10 |
+| FIELDFILTER-09 | ✗ | A ticked field left with nothing useful entered | Ignored rather than matching nothing | FE FF12 |
+| FIELDFILTER-10 | ✗ | A rep opens the panel | No "Owner" field (reps only ever see their own leads) | FE FF13, UI |
+| FIELDFILTER-11 | | Search the field list | Narrows to matching fields only | UI |
+| FIELDFILTER-12 | | Clear, then Apply | Every criterion gone, full list back | UI |
+| FIELDFILTER-13 | | Esc, or leave Leads and come back | Panel closes; the filter is still applied (remembered for the session) | UI |
+
 ## 3. Regression (REG): must keep working
 
 ### 3.1 Sign-in, roles, settings (AUTH)

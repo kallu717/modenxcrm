@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEscape } from "@/components/Modal";
+import { useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
 import { accountHref } from "@/lib/accounts";
@@ -64,13 +65,7 @@ export default function LeadDrawer({ leadId, onClose }: { leadId: string; onClos
   const [method, setMethod] = useState("NA");
   const [note, setNote] = useState("");
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useEscape(onClose);
 
   if (!lead) return null;
   const rep = repById(lead.assignee);
@@ -89,10 +84,13 @@ export default function LeadDrawer({ leadId, onClose }: { leadId: string; onClos
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex justify-end" style={{ background: "rgba(0,0,0,.4)" }} onClick={onClose}>
+    <div className="drawer-backdrop fixed inset-0 z-[90] flex justify-end" style={{ background: "rgba(0,0,0,.4)" }} onClick={onClose}>
       <aside
-        className="w-full max-w-md h-full overflow-y-auto p-5"
-        style={{ background: "var(--surface)", boxShadow: "var(--shadow-lg)" }}
+        role="dialog"
+        aria-modal="true"
+        aria-label={lead.name}
+        className="w-full max-w-md h-full overflow-y-auto p-5 border-l"
+        style={{ background: "var(--surface)", borderColor: "var(--grid)", boxShadow: "var(--shadow-lg)" }}
         onClick={(e) => e.stopPropagation()}
       >
         <button type="button" aria-label="Close" className="text-[13px] mb-3" style={{ color: "var(--muted)" }} onClick={onClose}>
@@ -335,7 +333,7 @@ export default function LeadDrawer({ leadId, onClose }: { leadId: string; onClos
         </Section>
 
         <Section title="Activity">
-          <div className="space-y-2">
+          <div className="space-y-2 fx-list">
             {lead.activity.map((a, i) => (
               <div key={i} className="text-[12px] border-l-2 pl-2" style={{ borderColor: "var(--grid)" }}>
                 <div className="flex justify-between gap-2">

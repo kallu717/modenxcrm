@@ -98,3 +98,15 @@ class Record(Base):
     updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
 
     __table_args__ = (CheckConstraint(_one_of("kind", RECORD_KINDS), name="ck_records_kind"),)
+
+
+class AppSetting(Base):
+    """Company-wide switches an admin sets on the Settings page, one row per
+    key. A key with no row uses its default (see SETTINGS in api.py)."""
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[dict] = mapped_column(JSONB)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))

@@ -51,7 +51,7 @@ function Approvals({ onOpenLead }: { onOpenLead: (id: string) => void }) {
           ? "Reps can't change contact or account details directly — approve a request and it's applied straight away."
           : "Waiting on your manager. Nothing changes until these are approved."}
       </p>
-      <div className="space-y-2">
+      <div className="space-y-2 fx-list">
         {mine.map((cr: ChangeRequest) => {
           const isAcct = cr.scope === "account";
           const lead = isAcct ? null : leads.find((l) => l.id === cr.leadId);
@@ -266,7 +266,7 @@ export default function FollowupsPage() {
                     {items.length}
                   </span>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 fx-list">
                   {items.map((l) => {
                     const rep = repById(l.assignee);
                     return (

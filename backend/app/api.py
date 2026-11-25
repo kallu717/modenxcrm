@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from .auth import admin_user, csrf_guard, current_user, is_server_admin, signed_in_user
 from .config import get_settings
 from .db import get_db
-from .models import RECORD_KINDS, ROLES, STAGES as LEAD_STAGES, Lead, Record, User, lead_id_seq
+from .models import RECORD_KINDS, ROLES, STAGES as LEAD_STAGES, AppSetting, Lead, Record, User, lead_id_seq
 from .phone import PHONE_RULE, phone_digits
 from .scoring import apply_score
 
@@ -170,6 +170,7 @@ def bootstrap(db: Session = Depends(get_db), user: User = Depends(current_user))
         "users": team(db),
         "leads": [lead_out(r) for r in visible_leads(db, user)],
         "records": grouped_records(db, user),
+        "settings": app_settings(db),
     }
 
 
@@ -342,7 +343,14 @@ def delete_lead(lead_id: str, db: Session = Depends(get_db), user: User = Depend
 
 
 class LeadIn(BaseModel):
+    # Contact name comes in as firstName + lastName (both required for anything
+    # entered through this app's own New lead form or import sheet) and is
+    # merged into one display name — see full_name() below. `name` on its own
+    # stays accepted so the Lead Desk feed, which only ever sends one field,
+    # keeps working unchanged.
     name: str = ""
+    firstName: str = ""
+    lastName: str = ""
     title: str = ""
     account: str = ""
     type: str = ""
@@ -360,10 +368,32 @@ class ImportIn(BaseModel):
     rows: list[LeadIn] = Field(max_length=5000)
 
 
-FIELD_LABELS = (("name", "Contact name"), ("title", "Job title"), ("account", "Account name"), ("type", "Account type"))
+FIELD_LABELS = (("title", "Job title"), ("account", "Account name"), ("type", "Account type"))
 
 
-def process_rows(db: Session, user: User, rows: list[LeadIn], source: str, *, dry_run: bool, strict: bool):
+def full_name(r: "LeadIn") -> str:
+    """The merged display name — first + last, or the plain `name` a legacy
+    caller (the Lead Desk feed) sent instead."""
+    merged = f"{r.firstName} {r.lastName}".strip()
+    return merged or r.name
+
+
+def missing_name_fields(r: "LeadIn") -> list[str]:
+    """First and last name are required from this app's own forms. A legacy
+    caller that only ever sends `name` (never firstName/lastName) is still
+    accepted, so the Lead Desk feed keeps working unchanged."""
+    if not r.firstName and not r.lastName:
+        return [] if r.name else ["First name", "Last name"]
+    missing = []
+    if not r.firstName:
+        missing.append("First name")
+    if not r.lastName:
+        missing.append("Last name")
+    return missing
+
+
+def process_rows(db: Session, user: User, rows: list[LeadIn], source: str, *, dry_run: bool, strict: bool,
+                 auto_assign: bool = False):
     """Shared by CSV/XLSX import, the Lead Desk push and the New lead form.
     Validates every row (each needs an email or a 10-digit phone, or both),
     drops duplicate emails and phone numbers (against the whole database, not
@@ -372,8 +402,10 @@ def process_rows(db: Session, user: User, rows: list[LeadIn], source: str, *, dr
 
     Owners are per location (account + city): a contact joins whoever owns
     its city at that account. A city the account doesn't have an owner for
-    yet starts unassigned for a manager to hand out, unless a rep is adding
-    the contact themselves, in which case it's theirs."""
+    yet goes to the person adding it when auto_assign is on (the admin's
+    "assign uploads to the uploader" setting) and they can own leads (a rep
+    or a manager); otherwise it starts unassigned for a manager to hand out."""
+    to_uploader = auto_assign and user.role in ASSIGNABLE_ROLES and user.email != SERVICE_EMAIL
     issues, valid = [], []
     emails = {r.email.lower() for r in rows if r.email}
     existing_emails = set(db.scalars(select(Lead.email_lc).where(Lead.email_lc.in_(emails)))) if emails else set()
@@ -403,7 +435,7 @@ def process_rows(db: Session, user: User, rows: list[LeadIn], source: str, *, dr
     for i, r in enumerate(rows):
         row_no = i + 2  # row 1 is the header
         required = list(FIELD_LABELS) + ([("city", "City")] if strict else [])
-        missing = [label for key, label in required if not getattr(r, key)]
+        missing = missing_name_fields(r) + [label for key, label in required if not getattr(r, key)]
         if missing:
             issues.append(f"Row {row_no}: missing {', '.join(missing)}")
             continue
@@ -458,7 +490,7 @@ def process_rows(db: Session, user: User, rows: list[LeadIn], source: str, *, dr
         account, acct_type = canonical.setdefault(key, (r.account, r.type))
         loc = (key, location_key(r.city))
         existing_owner = owners.get(loc)
-        assignee = existing_owner or (user.id if not is_manager(user) else None)
+        assignee = existing_owner or (user.id if to_uploader else None)
         if assignee is not None:
             owners.setdefault(loc, assignee)
         bits = [source]
@@ -470,7 +502,7 @@ def process_rows(db: Session, user: User, rows: list[LeadIn], source: str, *, dr
         n = db.execute(select(lead_id_seq.next_value())).scalar_one()
         lead = {
             "id": f"L{n:03d}",
-            "name": r.name, "title": r.title, "account": account, "type": acct_type,
+            "name": full_name(r), "title": r.title, "account": account, "type": acct_type,
             "email": r.email, "phone": r.phone, "city": r.city or "—",
             "emailQuality": "none" if not r.email else ("verified" if r.verified.lower().startswith("y") else "catchall"),
             "multiSource": False,
@@ -501,7 +533,8 @@ def email_lc_or_none(email: str) -> str | None:
 
 @router.post("/leads/import")
 def import_leads(body: ImportIn, dry_run: bool = False, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    res = process_rows(db, user, body.rows, f"Imported from {body.filename} by {user.name}.", dry_run=dry_run, strict=False)
+    res = process_rows(db, user, body.rows, f"Imported from {body.filename} by {user.name}.", dry_run=dry_run, strict=False,
+                       auto_assign=app_settings(db)["autoAssignUploads"])
     res["createdCount"] = len(res["created"])
     # A rep adding a contact to an account another rep owns doesn't get that lead back.
     res["created"] = [c for c in res["created"] if is_manager(user) or c["lead"]["assignee"] == str(user.id)]
@@ -553,7 +586,8 @@ def ingest_leads(body: IngestIn, dry_run: bool = False, db: Session = Depends(ge
 
 @router.post("/leads", status_code=201)
 def create_lead(body: LeadIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    result = process_rows(db, user, [body], f"Added by {user.name}.", dry_run=False, strict=True)
+    result = process_rows(db, user, [body], f"Added by {user.name}.", dry_run=False, strict=True,
+                          auto_assign=app_settings(db)["autoAssignUploads"])
     if not result["created"]:
         # the single row was rejected: surface why
         raise HTTPException(422, {"code": "invalid_lead", "issues": result["issues"], "duplicates": result["duplicates"]})
@@ -752,6 +786,47 @@ def sync(body: SyncIn, db: Session = Depends(get_db), user: User = Depends(curre
         "leads": [lead_out(r) for r in leads],
         "records": [{"kind": r.kind, "id": r.id, "data": r.data} for r in records],
     }
+
+
+# ------------------------------------------------------------------ settings
+
+# Company-wide switches an admin sets on the Settings page, with their
+# defaults (used until an admin changes one).
+#   autoAssignUploads: contacts someone imports or adds go to that person
+#     (when they're a rep or a manager and nobody owns that city at the
+#     account yet). Off: they arrive unassigned for a manager to hand out.
+SETTING_DEFAULTS: dict[str, bool] = {"autoAssignUploads": True}
+
+
+def app_settings(db: Session) -> dict:
+    out = dict(SETTING_DEFAULTS)
+    for row in db.scalars(select(AppSetting).where(AppSetting.key.in_(list(SETTING_DEFAULTS)))):
+        out[row.key] = row.value.get("value", SETTING_DEFAULTS[row.key])
+    return out
+
+
+@router.get("/settings")
+def get_app_settings(db: Session = Depends(get_db), user: User = Depends(current_user)):
+    return app_settings(db)
+
+
+@router.put("/admin/settings")
+def put_app_settings(body: dict, db: Session = Depends(get_db), user: User = Depends(admin_user)):
+    unknown = [k for k in body if k not in SETTING_DEFAULTS]
+    if unknown:
+        raise HTTPException(422, {"code": "unknown_setting", "keys": unknown})
+    for key, value in body.items():
+        if not isinstance(value, bool):
+            raise HTTPException(422, {"code": "bad_setting", "key": key})
+    for key, value in body.items():
+        row = db.get(AppSetting, key)
+        if row is None:
+            db.add(AppSetting(key=key, value={"value": value}, updated_by=user.id))
+        else:
+            row.value = {"value": value}
+            row.updated_by = user.id
+    db.commit()
+    return app_settings(db)
 
 
 # ------------------------------------------------------------------ admin

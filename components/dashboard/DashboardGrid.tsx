@@ -103,8 +103,8 @@ export default function DashboardGrid({
           <div
             key={p.id}
             data-widget={p.id}
-            className="dash-item relative"
-            style={{ "--w": p.w, "--h": p.h, opacity: dragging === p.id ? 0.4 : 1 } as React.CSSProperties}
+            className="dash-item relative fx-rise"
+            style={{ "--w": p.w, "--h": p.h, "--i": Math.min(i, 10), opacity: dragging === p.id ? 0.4 : 1 } as React.CSSProperties}
             draggable={editing}
             onDragStart={(e) => {
               e.dataTransfer.effectAllowed = "move";

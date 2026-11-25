@@ -67,7 +67,8 @@ describe("G. Filters", () => {
 });
 
 const row = (p: Record<string, unknown> = {}) => ({
-  "Contact name": "Ananya Sharma",
+  "First name": "Ananya",
+  "Last name": "Sharma",
   "Job title": "Marketing Head",
   "Account name": "Brand New Co",
   "Account type": "Brand",
@@ -80,6 +81,22 @@ describe("H. Spreadsheet import", () => {
 
   it("H1 a valid row is ready", () => {
     expect(stageImport([row()], "leads.xlsx", existing).rows).toHaveLength(1);
+  });
+
+  it("H1b first and last name are both required, and merge into the stored name", () => {
+    const noFirst = stageImport([row({ "First name": "" })], "x", existing);
+    expect(noFirst.rejected).toBe(1);
+    expect(noFirst.issues[0]).toContain("missing First name");
+
+    const noLast = stageImport([row({ "Last name": "" })], "x", existing);
+    expect(noLast.rejected).toBe(1);
+    expect(noLast.issues[0]).toContain("missing Last name");
+
+    const neither = stageImport([row({ "First name": "", "Last name": "" })], "x", existing);
+    expect(neither.issues[0]).toContain("missing First name, Last name");
+
+    const ok = stageImport([row()], "x", existing);
+    expect(ok.rows[0]).toMatchObject({ firstName: "Ananya", lastName: "Sharma" });
   });
 
   it("H2 missing job title is rejected with the sheet row number", () => {
@@ -98,13 +115,13 @@ describe("H. Spreadsheet import", () => {
   });
 
   it("H5 the same email twice in one sheet", () => {
-    const s = stageImport([row(), row({ "Contact name": "Someone Else" })], "x", existing);
+    const s = stageImport([row(), row({ "First name": "Someone Else" })], "x", existing);
     expect(s.rows).toHaveLength(1);
     expect(s.duplicates).toBe(1);
   });
 
   it("H6 messy header spacing and case", () => {
-    const r = { "  contact NAME ": "Ananya", "JOB TITLE": "Owner", "account name": "X Co", "Account Type": "Store", " EMAIL ": "a@xco.in" };
+    const r = { "  first NAME ": "Ananya", " last name ": "Sharma", "JOB TITLE": "Owner", "account name": "X Co", "Account Type": "Store", " EMAIL ": "a@xco.in" };
     expect(stageImport([r], "x", existing).rows).toHaveLength(1);
   });
 

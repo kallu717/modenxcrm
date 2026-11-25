@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { signOut, startSession } from "@/lib/sync";
 import Masthead from "./Masthead";
+import { AppSkeleton } from "./fx";
 
 // Signed in with Microsoft, but no admin has given this person a role yet.
 function WaitingForAccess() {
@@ -94,12 +95,16 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
   if (status === "pending") return <WaitingForAccess />;
+  if (status === "loading") return <AppSkeleton />;
   if (status !== "in") return null;
 
   return (
     <>
       <Masthead />
-      <div className="max-w-[1320px] w-full mx-auto px-[18px] pb-[60px] flex-1">{children}</div>
+      {/* keyed by page, so each page fades in when you arrive on it */}
+      <div key={pathname} className="fx-fade max-w-[1320px] w-full mx-auto px-[18px] pb-[60px] flex-1">
+        {children}
+      </div>
     </>
   );
 }

@@ -12,10 +12,14 @@ export default function FilterBar({
   value,
   onChange,
   cities,
+  fieldFilterCount,
+  onOpenFieldFilter,
 }: {
   value: FilterState;
   onChange: (f: FilterState) => void;
   cities: string[];
+  fieldFilterCount?: number;
+  onOpenFieldFilter?: () => void;
 }) {
   const isManager = useStore((s) => s.isManager());
   const reps = assignableList();
@@ -103,6 +107,25 @@ export default function FilterBar({
           ))}
           <option value="__unassigned">Unassigned</option>
         </select>
+      )}
+      {onOpenFieldFilter && (
+        <button
+          type="button"
+          className="px-2.5 py-1.5 rounded-md text-[13px] border flex items-center gap-1.5"
+          style={selectStyle}
+          onClick={onOpenFieldFilter}
+          data-tip="Build a filter from any field"
+        >
+          ⚙ Filter by field
+          {!!fieldFilterCount && (
+            <span
+              className="rounded-full px-1.5 font-mono text-white"
+              style={{ background: "var(--accent)", fontSize: "10px", lineHeight: "16px" }}
+            >
+              {fieldFilterCount}
+            </span>
+          )}
+        </button>
       )}
       <button
         type="button"

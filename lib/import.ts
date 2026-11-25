@@ -3,7 +3,8 @@ import type { AccountType, Lead } from "./types";
 import { EMAIL_RE, PHONE_RULE, phoneDigits, phoneKey } from "./phone";
 
 export const IMPORT_COLUMNS = [
-  { key: "name", header: "Contact name", required: true, example: "Ananya Sharma" },
+  { key: "firstName", header: "First name", required: true, example: "Ananya" },
+  { key: "lastName", header: "Last name", required: true, example: "Sharma" },
   { key: "title", header: "Job title", required: true, example: "Marketing Head" },
   { key: "account", header: "Account name", required: true, example: "Studio Weft" },
   { key: "type", header: "Account type", required: true, example: "Brand" },
@@ -18,7 +19,8 @@ export const IMPORT_COLUMNS = [
 export const VALID_TYPES: AccountType[] = ["Brand", "Mall", "Store"];
 
 export interface ImportRow {
-  name: string;
+  firstName: string;
+  lastName: string;
   title: string;
   account: string;
   type: AccountType;
@@ -108,7 +110,8 @@ export function stageImport(raw: Record<string, unknown>[], filename: string, ex
     if (email) seen.add(email);
     if (phone) seenPhones.add(phone);
     rows.push({
-      name: r.name,
+      firstName: r.firstName,
+      lastName: r.lastName,
       title: r.title,
       account: r.account,
       type,

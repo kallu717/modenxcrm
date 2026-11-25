@@ -1,5 +1,7 @@
 "use client";
 
+import Modal from "@/components/Modal";
+import { celebrate, originOf } from "@/lib/confetti";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { PLANS, fmtInr } from "@/lib/revenue";
@@ -13,16 +15,7 @@ export default function WonModal({ lead, onClose }: { lead: Lead; onClose: () =>
   const [mandateDate, setMandateDate] = useState(lead.mandateDate || isoToday());
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center"
-      style={{ background: "rgba(0,0,0,.4)" }}
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-md rounded-xl p-5"
-        style={{ background: "var(--surface)", boxShadow: "var(--shadow-lg)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} label={`${lead.account}: subscription details`} width="max-w-md">
         <h3 className="text-[15px] font-semibold" style={{ color: "var(--ink)" }}>
           {lead.account} — subscription details
         </h3>
@@ -84,8 +77,9 @@ export default function WonModal({ lead, onClose }: { lead: Lead; onClose: () =>
             disabled={!chosen}
             className="px-3 py-1.5 rounded-md text-[13px] text-white disabled:opacity-40"
             style={{ background: "var(--accent)" }}
-            onClick={() => {
+            onClick={(e) => {
               if (!chosen) return;
+              celebrate(originOf(e.currentTarget));
               setLeadPlan(lead.id, chosen, mandateDate || isoToday());
               const p = PLANS.find((x) => x.id === chosen);
               if (p) showToast(`${p.name} · ${fmtInr(p.mrr)}/mo mandate created`);
@@ -95,7 +89,6 @@ export default function WonModal({ lead, onClose }: { lead: Lead; onClose: () =>
             Save subscription
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

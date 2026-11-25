@@ -9,7 +9,8 @@ import { makeLead, resetStore, store, leadById } from "./helpers";
 // same rules (backend/tests/test_phone.py); these are the in-browser checks.
 
 const row = (p: Record<string, unknown> = {}) => ({
-  "Contact name": "Ananya Sharma",
+  "First name": "Ananya",
+  "Last name": "Sharma",
   "Job title": "Marketing Head",
   "Account name": "Brand New Co",
   "Account type": "Brand",
@@ -73,7 +74,7 @@ describe("PH. Importing with an email, a phone, or both", () => {
   });
 
   it("PH7 ✗ the same phone twice in one sheet keeps only the first", () => {
-    const s = stageImport([row({ Phone: "9123456789" }), row({ "Contact name": "Twin", Phone: "91234 56789" })], "x", existing);
+    const s = stageImport([row({ Phone: "9123456789" }), row({ "First name": "Twin", Phone: "91234 56789" })], "x", existing);
     expect(s.rows).toHaveLength(1);
     expect(s.duplicates).toBe(1);
   });
